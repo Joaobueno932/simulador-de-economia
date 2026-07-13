@@ -1,0 +1,98 @@
+@import "tailwindcss";
+
+/* ==========================================================================
+   Identidade visual — Agentes de Energia / Em Conta
+   Cores amostradas do material oficial (image1.png da planilha + mascote).
+   ========================================================================== */
+@theme {
+  /* Azul institucional */
+  --color-marca-azul: #0f579f;
+  --color-marca-azul-escuro: #0a3d70;
+  --color-marca-azul-claro: #3d81c9;
+  --color-marca-azul-suave: #eaf2fb;
+
+  /* Verde — sustentabilidade e economia */
+  --color-marca-verde: #3aaa35;
+  --color-marca-verde-escuro: #2b8228;
+  --color-marca-verde-claro: #95c11f;
+  --color-marca-verde-suave: #eaf7e9;
+
+  /* Amarelo do mascote — cor de destaque */
+  --color-marca-amarelo: #ffd400;
+  --color-marca-amarelo-suave: #fff8dd;
+
+  /* Laranja — alertas e destaques secundários */
+  --color-marca-laranja: #f08120;
+  --color-marca-laranja-suave: #fdf0e4;
+
+  /* Neutros */
+  --color-marca-fundo: #f4f7fb;
+  --color-marca-texto: #1c2b3a;
+  --color-marca-texto-suave: #5b6b7c;
+  --color-marca-borda: #dfe6ee;
+
+  --radius-card: 1rem;
+
+  --font-sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+}
+
+/* ==========================================================================
+   Base
+   ========================================================================== */
+html {
+  -webkit-text-size-adjust: 100%;
+}
+
+body {
+  background-color: var(--color-marca-fundo);
+  color: var(--color-marca-texto);
+  font-family: var(--font-sans);
+  /* Nunca permitir rolagem horizontal (requisito mobile). */
+  overflow-x: hidden;
+}
+
+/* Foco sempre visível — acessibilidade por teclado. */
+:where(a, button, input, select, textarea, [tabindex]):focus-visible {
+  outline: 3px solid var(--color-marca-azul);
+  outline-offset: 2px;
+  border-radius: 0.375rem;
+}
+
+/* Remove as setas dos inputs numéricos: os valores são digitados. */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* ==========================================================================
+   Impressão / PDF
+   A página da proposta é renderizada em A4 pelo Puppeteer.
+   ========================================================================== */
+@page {
+  size: A4;
+  margin: 0;
+}
+
+@media print {
+  html,
+  body {
+    background: #ffffff !important;
+    margin: 0;
+    padding: 0;
+  }
+
+  /* Preserva as cores institucionais na impressão. */
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+
+  .nao-imprimir {
+    display: none !important;
+  }
+}
