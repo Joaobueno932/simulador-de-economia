@@ -22,13 +22,17 @@ export function Card({
 }) {
   return (
     <div
-      className={`rounded-card border border-marca-borda bg-white p-5 shadow-sm sm:p-6 ${className}`}
+      className={`rounded-card border border-marca-borda/70 bg-white p-5 shadow-[0_1px_2px_rgba(16,42,67,.04),0_8px_24px_-12px_rgba(16,42,67,.15)] sm:p-6 ${className}`}
     >
       {children}
     </div>
   );
 }
 
+/**
+ * Título de seção com ícone em "selo" colorido — dá hierarquia visual sem
+ * precisar de peso tipográfico exagerado.
+ */
 export function SectionTitle({
   children,
   icon,
@@ -39,12 +43,18 @@ export function SectionTitle({
   descricao?: string;
 }) {
   return (
-    <div className="mb-5">
-      <h2 className="flex items-center gap-2 text-lg font-bold text-marca-azul">
-        {icon}
-        {children}
-      </h2>
-      {descricao ? <p className="mt-1 text-sm text-marca-texto-suave">{descricao}</p> : null}
+    <div className="mb-5 flex items-start gap-3">
+      {icon ? (
+        <span className="grid size-9 shrink-0 place-items-center rounded-xl bg-marca-azul-suave text-marca-azul">
+          {icon}
+        </span>
+      ) : null}
+      <div className="min-w-0">
+        <h2 className="text-lg font-bold leading-tight text-marca-texto">{children}</h2>
+        {descricao ? (
+          <p className="mt-0.5 text-sm text-marca-texto-suave">{descricao}</p>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -60,8 +70,9 @@ export function MensagemErro({ id, children }: { id: string; children: ReactNode
 }
 
 const baseInput =
-  "w-full rounded-lg border bg-white px-3 py-2.5 text-base text-marca-texto " +
-  "placeholder:text-marca-texto-suave/60 transition-colors " +
+  "w-full rounded-xl border-2 bg-white px-3.5 py-2.5 text-base font-medium text-marca-texto " +
+  "placeholder:font-normal placeholder:text-marca-texto-suave/50 transition-all " +
+  "hover:border-marca-azul-claro/60 focus:ring-4 focus:ring-marca-azul/10 " +
   "disabled:cursor-not-allowed disabled:bg-slate-100 disabled:text-marca-texto-suave";
 
 interface CampoProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
@@ -164,10 +175,13 @@ export function Select({ label, erro, ajuda, opcoes, className = "", ...props }:
 type Variante = "primario" | "secundario" | "sutil" | "perigo";
 
 const variantes: Record<Variante, string> = {
-  primario: "bg-marca-azul text-white hover:bg-marca-azul-escuro",
-  secundario: "bg-marca-verde text-white hover:bg-marca-verde-escuro",
-  sutil: "border border-marca-borda bg-white text-marca-texto hover:bg-marca-azul-suave",
-  perigo: "border border-red-200 bg-white text-red-700 hover:bg-red-50",
+  primario:
+    "bg-marca-azul text-white shadow-lg shadow-marca-azul/25 hover:bg-marca-azul-escuro hover:shadow-marca-azul/35 active:scale-[0.98]",
+  secundario:
+    "bg-marca-verde text-white shadow-lg shadow-marca-verde/30 hover:bg-marca-verde-escuro hover:shadow-marca-verde/40 active:scale-[0.98]",
+  sutil:
+    "border-2 border-marca-borda bg-white text-marca-texto hover:border-marca-azul-claro hover:bg-marca-azul-suave",
+  perigo: "border-2 border-red-200 bg-white text-red-700 hover:border-red-300 hover:bg-red-50",
 };
 
 export function Botao({
@@ -178,7 +192,7 @@ export function Botao({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & { variante?: Variante }) {
   return (
     <button
-      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-lg px-4 py-2.5 text-sm font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${variantes[variante]} ${className}`}
+      className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-5 py-2.5 text-sm font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50 disabled:shadow-none ${variantes[variante]} ${className}`}
       {...props}
     >
       {children}

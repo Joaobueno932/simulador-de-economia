@@ -310,6 +310,27 @@ export function EtapaResultado({ r }: { r: ResultadoSimulacao }) {
           </dl>
         </Card>
 
+        {/* Sem concorrente informado, a coluna direita ficaria vazia. Em vez de um
+            buraco, o próximo passo: gerar a proposta. */}
+        {r.economiaConcorrenteAnual === null ? (
+          <Card className="flex flex-col justify-center bg-gradient-to-br from-marca-azul-suave to-white">
+            <div className="flex items-center gap-4">
+              <Mascote variante="fatura-sem-fundo" className="h-28 w-auto shrink-0" />
+              <div>
+                <h2 className="text-lg font-bold text-marca-texto">Proposta pronta para enviar</h2>
+                <p className="mt-1 text-sm text-marca-texto-suave">
+                  Os números acima já são os da proposta. Gere o PDF e envie ao cliente — ele sai
+                  em uma página, com a identidade da Em Conta.
+                </p>
+                <p className="mt-2 text-xs text-marca-texto-suave">
+                  Quer comparar com outra geradora? Informe o custo por kWh do concorrente na
+                  etapa anterior.
+                </p>
+              </div>
+            </div>
+          </Card>
+        ) : null}
+
         {r.economiaConcorrenteAnual !== null && r.economiaVsConcorrenteAnual !== null ? (
           <Card>
             <SectionTitle
