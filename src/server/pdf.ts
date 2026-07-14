@@ -20,6 +20,7 @@ import path from "node:path";
 import type { Browser } from "puppeteer";
 
 import { Proposta, type AssetsProposta } from "@/components/Proposta";
+import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import type { DadosCliente, ResultadoSimulacao } from "@/domain/simulator/types";
 
 const PASTA_IMG = path.join(process.cwd(), "public", "img");
@@ -162,13 +163,14 @@ function montarHtml(markup: string): string {
 export async function gerarPdfProposta(
   cliente: DadosCliente,
   resultado: ResultadoSimulacao,
+  config: ConfiguracaoSimulador,
 ): Promise<Uint8Array> {
   const assets = await carregarAssets();
 
   // Import dinâmico: o Next barra `react-dom/server` importado no topo de um
   // módulo alcançável pelo bundle, mesmo em rota Node.
   const { renderToStaticMarkup } = await import("react-dom/server");
-  const markup = renderToStaticMarkup(Proposta({ cliente, r: resultado, assets }));
+  const markup = renderToStaticMarkup(Proposta({ cliente, r: resultado, config, assets }));
 
   const navegador = await abrirNavegador();
   try {

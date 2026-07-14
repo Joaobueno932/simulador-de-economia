@@ -4,14 +4,15 @@
  * Estado da simulação + rascunho automático no navegador.
  *
  * O cálculo NÃO mora aqui: este hook só guarda as ENTRADAS e delega a
- * `calcularSimulacao`. Assim a tela recalcula em tempo real sem duplicar regra
- * de negócio, e o servidor recalcula do mesmo jeito a partir das mesmas entradas.
+ * `calcularSimulacao`, passando a config que veio do servidor. Assim a tela
+ * recalcula em tempo real sem duplicar regra de negócio, e o servidor recalcula
+ * do mesmo jeito, com a mesma config, a partir das mesmas entradas.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { calcularSimulacao } from "@/domain/simulator/calculations";
-import { CONFIG } from "@/domain/simulator/config";
+import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import { hojeISO } from "@/domain/simulator/format";
 import type {
   DadosCliente,
@@ -20,14 +21,14 @@ import type {
   UnidadeConsumidora,
 } from "@/domain/simulator/types";
 
-const CHAVE_RASCUNHO = "em-conta:simulacao:v1";
+const CHAVE_RASCUNHO = "em-conta:simulacao:v2";
 export const MAX_UCS = 10;
 
 function novoId(): string {
   return `uc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function criarUC(indice: number): UnidadeConsumidora {
+export function criarUC(indice: number, descontoPadrao: number): UnidadeConsumidora {
   return {
     id: novoId(),
     nome: `UC ${String(indice + 1).padStart(2, "0")}`,
@@ -36,24 +37,30 @@ export function criarUC(indice: number): UnidadeConsumidora {
     consumoForaPonta: 0,
     consumoPonta: 0,
     demandaContratada: 0,
-    desconto: CONFIG.descontoPadrao,
+    desconto: descontoPadrao,
     cosipOverride: null,
     custoKwhConcorrente: null,
   };
 }
 
-function estadoInicial(): Simulacao {
+interface Inicial {
+  readonly consultor: string;
+  readonly config: ConfiguracaoSimulador;
+}
+
+function estadoInicial({ consultor, config }: Inicial): Simulacao {
   return {
     cliente: {
       nome: "",
       documento: "",
       telefone: "",
       email: "",
-      consultor: "",
+      consultor,
+      // Data sempre "hoje" e validade sempre da config — o formulário não edita.
       dataProposta: hojeISO(),
-      validadeDias: CONFIG.validadePropostaDias,
+      validadeDias: config.validadePropostaDias,
     },
-    unidades: [criarUC(0)],
+    unidades: [criarUC(0, config.descontoPadrao)],
   };
 }
 
@@ -72,16 +79,32 @@ function lerRascunho(): Simulacao | null {
   }
 }
 
-export function useSimulacao() {
-  const [simulacao, setSimulacao] = useState<Simulacao>(estadoInicial);
+export function useSimulacao(config: ConfiguracaoSimulador, consultorInicial: string) {
+  const [simulacao, setSimulacao] = useState<Simulacao>(() =>
+    estadoInicial({ consultor: consultorInicial, config }),
+  );
   const [rascunhoCarregado, setRascunhoCarregado] = useState(false);
   const primeiraRenderizacao = useRef(true);
 
   // Restaura o rascunho depois da hidratação (o servidor não tem localStorage).
   useEffect(() => {
     const salvo = lerRascunho();
-    if (salvo) setSimulacao(salvo);
+    if (salvo) {
+      // Data e validade são sempre reimpostas: um rascunho de ontem não pode
+      // ressuscitar a data de ontem nem uma validade antiga.
+      setSimulacao({
+        ...salvo,
+        cliente: {
+          ...salvo.cliente,
+          dataProposta: hojeISO(),
+          validadeDias: config.validadePropostaDias,
+          consultor: salvo.cliente.consultor || consultorInicial,
+        },
+      });
+    }
     setRascunhoCarregado(true);
+    // Só na montagem: o rascunho é restaurado uma vez.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Salva a cada mudança, exceto na restauração inicial.
@@ -112,9 +135,12 @@ export function useSimulacao() {
   const adicionarUC = useCallback(() => {
     setSimulacao((s) => {
       if (s.unidades.length >= MAX_UCS) return s;
-      return { ...s, unidades: [...s.unidades, criarUC(s.unidades.length)] };
+      return {
+        ...s,
+        unidades: [...s.unidades, criarUC(s.unidades.length, config.descontoPadrao)],
+      };
     });
-  }, []);
+  }, [config.descontoPadrao]);
 
   const duplicarUC = useCallback((id: string) => {
     setSimulacao((s) => {
@@ -139,16 +165,19 @@ export function useSimulacao() {
   }, []);
 
   const limpar = useCallback(() => {
-    setSimulacao(estadoInicial());
+    setSimulacao(estadoInicial({ consultor: consultorInicial, config }));
     try {
       window.localStorage.removeItem(CHAVE_RASCUNHO);
     } catch {
       // ignorado — ver acima
     }
-  }, []);
+  }, [config, consultorInicial]);
 
   // Recalcula a cada tecla: é o "tempo real" exigido, e é barato (funções puras).
-  const resultado: ResultadoSimulacao = useMemo(() => calcularSimulacao(simulacao), [simulacao]);
+  const resultado: ResultadoSimulacao = useMemo(
+    () => calcularSimulacao(simulacao, config),
+    [simulacao, config],
+  );
 
   return {
     simulacao,

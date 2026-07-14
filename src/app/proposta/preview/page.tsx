@@ -1,57 +1,23 @@
-"use client";
-
 /**
- * Pré-visualização da proposta.
+ * Pré-visualização da proposta — server component.
  *
- * Lê o rascunho do navegador e renderiza EXATAMENTE o mesmo componente que a
- * rota de PDF usa no servidor. O que se vê aqui é o que sai no PDF.
+ * Carrega a config do banco (as tarifas vigentes) e a sessão. O rascunho da
+ * simulação está no navegador, então quem monta a folha é o componente cliente.
  */
 
-import { ArrowLeft, Printer } from "lucide-react";
-import Link from "next/link";
+import { redirect } from "next/navigation";
 
-import { Proposta } from "@/components/Proposta";
-import { useSimulacao } from "@/components/useSimulacao";
+import { PreviewProposta } from "@/components/PreviewProposta";
+import { sessaoAtual } from "@/server/auth";
+import { carregarConfiguracao } from "@/server/configuracao";
 
-export default function PreviewPage() {
-  const { simulacao, resultado, rascunhoCarregado } = useSimulacao();
+export const dynamic = "force-dynamic";
 
-  if (!rascunhoCarregado) {
-    return (
-      <main className="grid min-h-dvh place-items-center p-6 text-marca-texto-suave">
-        Carregando proposta…
-      </main>
-    );
-  }
+export default async function PreviewPage() {
+  const sessao = await sessaoAtual();
+  if (!sessao) redirect("/login");
 
-  return (
-    <div className="min-h-dvh bg-marca-fundo py-6">
-      {/* Barra de ações — não sai na impressão. */}
-      <div className="nao-imprimir mx-auto mb-6 flex max-w-[210mm] flex-wrap items-center justify-between gap-3 px-4">
-        <Link
-          href="/"
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg border border-marca-borda bg-white px-4 py-2.5 text-sm font-semibold text-marca-texto hover:bg-marca-azul-suave"
-        >
-          <ArrowLeft aria-hidden="true" className="size-4" />
-          Voltar ao simulador
-        </Link>
+  const config = await carregarConfiguracao();
 
-        <button
-          type="button"
-          onClick={() => window.print()}
-          className="inline-flex min-h-11 items-center gap-2 rounded-lg bg-marca-azul px-4 py-2.5 text-sm font-semibold text-white hover:bg-marca-azul-escuro"
-        >
-          <Printer aria-hidden="true" className="size-4" />
-          Imprimir
-        </button>
-      </div>
-
-      {/* A folha A4. `origin-top` + scale mantém a proporção em telas estreitas. */}
-      <div className="flex justify-center overflow-x-auto px-4">
-        <div className="shadow-lg print:shadow-none">
-          <Proposta cliente={simulacao.cliente} r={resultado} />
-        </div>
-      </div>
-    </div>
-  );
+  return <PreviewProposta config={config} consultorPadrao={sessao.usuario.nome} />;
 }

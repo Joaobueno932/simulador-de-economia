@@ -1,27 +1,57 @@
 "use client";
 
-/** Etapa 1 — Dados do cliente. Máscaras + validação em português. */
+/**
+ * Etapa 1 — Dados do cliente.
+ *
+ * Três campos deixaram de ser livres:
+ *  - CONSULTOR: vendedor emite sempre em nome próprio (campo travado);
+ *    admin/gestor escolhem entre os vendedores cadastrados (dropdown).
+ *  - DATA DA PROPOSTA: sempre hoje. Não se edita.
+ *  - VALIDADE: vem da configuração, alterável só por admin/gestor.
+ *
+ * A tela apenas reflete isso. Quem garante é a rota do PDF, que sobrescreve os
+ * três no servidor — mexer no HTML aqui não muda o que sai no PDF.
+ */
 
-import { UserRound } from "lucide-react";
+import { CalendarDays, Lock, UserRound } from "lucide-react";
 import { useState } from "react";
 
-import { Campo, Card, SectionTitle } from "./ui";
-import { CONFIG } from "@/domain/simulator/config";
-import { formatarData, formatarDocumento, formatarTelefone, somarDias } from "@/domain/simulator/format";
+import { Campo, Card, SectionTitle, Select } from "./ui";
+import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
+import {
+  formatarData,
+  formatarDocumento,
+  formatarTelefone,
+  somarDias,
+} from "@/domain/simulator/format";
 import { dadosClienteSchema } from "@/domain/simulator/validation";
 import type { DadosCliente } from "@/domain/simulator/types";
+import { podeEscolherConsultor, type Papel } from "@/domain/auth/types";
 
 type Campos = keyof DadosCliente;
+
+export interface VendedorOpcao {
+  readonly id: number;
+  readonly nome: string;
+  readonly instituicao: string | null;
+}
 
 export function EtapaCliente({
   cliente,
   onChange,
   tentouAvancar,
+  papel,
+  vendedores,
+  config,
 }: {
   cliente: DadosCliente;
   onChange: (patch: Partial<DadosCliente>) => void;
   /** Mostra os erros só depois da 1ª tentativa de avançar — não hostiliza quem está digitando. */
   tentouAvancar: boolean;
+  papel: Papel;
+  /** Vendedores ativos — só usado por admin/gestor. */
+  vendedores: readonly VendedorOpcao[];
+  config: ConfiguracaoSimulador;
 }) {
   const [tocados, setTocados] = useState<Partial<Record<Campos, boolean>>>({});
 
@@ -34,11 +64,10 @@ export function EtapaCliente({
     }
   }
 
-  const erroDe = (campo: Campos) =>
-    tocados[campo] || tentouAvancar ? erros[campo] : undefined;
-
+  const erroDe = (campo: Campos) => (tocados[campo] || tentouAvancar ? erros[campo] : undefined);
   const marcarTocado = (campo: Campos) => setTocados((t) => ({ ...t, [campo]: true }));
 
+  const escolheConsultor = podeEscolherConsultor(papel);
   const validade = somarDias(cliente.dataProposta, cliente.validadeDias);
 
   return (
@@ -93,36 +122,56 @@ export function EtapaCliente({
           placeholder="cliente@email.com"
         />
 
-        <Campo
-          label="Consultor responsável"
-          value={cliente.consultor}
-          onChange={(e) => onChange({ consultor: e.target.value })}
-          onBlur={() => marcarTocado("consultor")}
-          erro={erroDe("consultor")}
-        />
+        {/* Consultor: dropdown para admin/gestor, travado para vendedor. */}
+        {escolheConsultor ? (
+          <Select
+            label="Consultor responsável"
+            value={cliente.consultor}
+            onChange={(e) => onChange({ consultor: e.target.value })}
+            onBlur={() => marcarTocado("consultor")}
+            erro={erroDe("consultor")}
+            opcoes={[
+              { value: "", label: "Selecione o vendedor…" },
+              ...vendedores.map((v) => ({
+                value: v.nome,
+                label: v.instituicao ? `${v.nome} — ${v.instituicao}` : v.nome,
+              })),
+            ]}
+            ajuda={
+              vendedores.length === 0
+                ? "Nenhum vendedor cadastrado. Cadastre em Administração."
+                : "A proposta sai em nome do vendedor selecionado."
+            }
+          />
+        ) : (
+          <Campo
+            label="Consultor responsável"
+            value={cliente.consultor}
+            readOnly
+            disabled
+            icone={<Lock aria-hidden="true" className="size-3.5" />}
+            ajuda="A proposta sai automaticamente no seu nome."
+          />
+        )}
 
+        {/* Data: sempre hoje. Campo somente leitura. */}
         <Campo
           label="Data da proposta"
-          type="date"
-          value={cliente.dataProposta}
-          onChange={(e) => onChange({ dataProposta: e.target.value })}
-          onBlur={() => marcarTocado("dataProposta")}
-          erro={erroDe("dataProposta")}
-        />
-
-        <Campo
-          label="Validade da proposta"
-          type="number"
-          min={1}
-          step={1}
-          value={String(cliente.validadeDias)}
-          onChange={(e) => onChange({ validadeDias: Number(e.target.value) })}
-          onBlur={() => marcarTocado("validadeDias")}
-          erro={erroDe("validadeDias")}
-          sufixo="dias"
-          ajuda={`Válida até ${formatarData(validade)}. Padrão: ${CONFIG.validadePropostaDias} dias.`}
+          value={formatarData(cliente.dataProposta)}
+          readOnly
+          disabled
+          icone={<CalendarDays aria-hidden="true" className="size-3.5" />}
+          ajuda={`Válida até ${formatarData(validade)} (${cliente.validadeDias} dias).`}
         />
       </div>
+
+      <p className="mt-4 flex items-start gap-2 rounded-xl bg-marca-azul-suave px-3 py-2.5 text-xs text-marca-texto-suave">
+        <Lock aria-hidden="true" className="mt-0.5 size-3.5 shrink-0" />
+        <span>
+          A data é sempre a de hoje e a validade de {config.validadePropostaDias} dias vem da
+          configuração — só administradores e gestores alteram.
+        </span>
+      </p>
     </Card>
   );
 }

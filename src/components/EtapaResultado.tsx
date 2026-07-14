@@ -8,10 +8,10 @@
  * Economia. É isso que faz a economia aparecer como a fatia poupada.
  */
 
-import { Building2, Leaf, PiggyBank, Receipt, TrendingDown, Users, Zap } from "lucide-react";
+import { Leaf, PiggyBank, Receipt, TrendingDown, Users, Zap } from "lucide-react";
 
 import { Card, Mascote, SectionTitle } from "./ui";
-import { CONFIG } from "@/domain/simulator/config";
+import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
 import {
   formatarDecimal,
   formatarKwh,
@@ -76,7 +76,13 @@ function CardDestaque({
 }
 
 /** Barra empilhada — a composição da fatura (chart1 da planilha). */
-function ComposicaoFatura({ r }: { r: ResultadoSimulacao }) {
+function ComposicaoFatura({
+  r,
+  config,
+}: {
+  r: ResultadoSimulacao;
+  config: ConfiguracaoSimulador;
+}) {
   const total = r.faturaAtual;
   if (total <= 0) return null;
 
@@ -85,7 +91,7 @@ function ComposicaoFatura({ r }: { r: ResultadoSimulacao }) {
   const partes = [
     {
       chave: "distribuidora",
-      rotulo: `Fatura ${CONFIG.institucional.distribuidora}`,
+      rotulo: `Fatura ${config.institucional.distribuidora}`,
       nota: "Taxa mínima + impostos + COSIP",
       valor: r.valorPagoDistribuidora,
       cor: "bg-marca-azul",
@@ -197,7 +203,13 @@ function Bandeiras({ r }: { r: ResultadoSimulacao }) {
   );
 }
 
-export function EtapaResultado({ r }: { r: ResultadoSimulacao }) {
+export function EtapaResultado({
+  r,
+  config = CONFIG,
+}: {
+  r: ResultadoSimulacao;
+  config?: ConfiguracaoSimulador;
+}) {
   const temEconomia = r.economiaMensal > 0;
 
   return (
@@ -269,7 +281,7 @@ export function EtapaResultado({ r }: { r: ResultadoSimulacao }) {
           <SectionTitle icon={<Receipt aria-hidden="true" className="size-5" />}>
             Composição da fatura
           </SectionTitle>
-          <ComposicaoFatura r={r} />
+          <ComposicaoFatura r={r} config={config} />
         </Card>
 
         <Card>
@@ -310,57 +322,18 @@ export function EtapaResultado({ r }: { r: ResultadoSimulacao }) {
           </dl>
         </Card>
 
-        {/* Sem concorrente informado, a coluna direita ficaria vazia. Em vez de um
-            buraco, o próximo passo: gerar a proposta. */}
-        {r.economiaConcorrenteAnual === null ? (
-          <Card className="flex flex-col justify-center bg-gradient-to-br from-marca-azul-suave to-white">
-            <div className="flex items-center gap-4">
-              <Mascote variante="fatura-sem-fundo" className="h-28 w-auto shrink-0" />
-              <div>
-                <h2 className="text-lg font-bold text-marca-texto">Proposta pronta para enviar</h2>
-                <p className="mt-1 text-sm text-marca-texto-suave">
-                  Os números acima já são os da proposta. Gere o PDF e envie ao cliente — ele sai
-                  em uma página, com a identidade da Em Conta.
-                </p>
-                <p className="mt-2 text-xs text-marca-texto-suave">
-                  Quer comparar com outra geradora? Informe o custo por kWh do concorrente na
-                  etapa anterior.
-                </p>
-              </div>
+        <Card className="flex flex-col justify-center bg-gradient-to-br from-marca-azul-suave to-white">
+          <div className="flex items-center gap-4">
+            <Mascote variante="fatura-sem-fundo" className="h-28 w-auto shrink-0" />
+            <div>
+              <h2 className="text-lg font-bold text-marca-texto">Proposta pronta para enviar</h2>
+              <p className="mt-1 text-sm text-marca-texto-suave">
+                Os números acima já são os da proposta. Gere o PDF e envie ao cliente — ele sai em
+                uma página, com a identidade da Em Conta.
+              </p>
             </div>
-          </Card>
-        ) : null}
-
-        {r.economiaConcorrenteAnual !== null && r.economiaVsConcorrenteAnual !== null ? (
-          <Card>
-            <SectionTitle
-              icon={<Building2 aria-hidden="true" className="size-5" />}
-              descricao="Comparação anual com a geradora concorrente informada."
-            >
-              Em Conta x Concorrente
-            </SectionTitle>
-            <dl className="divide-y divide-marca-borda">
-              <Metrica
-                rotulo="Economia com a Em Conta (ano)"
-                valor={formatarMoeda(r.economiaAnual)}
-                destaque
-              />
-              <Metrica
-                rotulo="Economia do concorrente (ano)"
-                valor={formatarMoeda(r.economiaConcorrenteAnual)}
-              />
-              <Metrica
-                rotulo="Diferença (Em Conta − concorrente)"
-                valor={formatarMoeda(r.economiaVsConcorrenteAnual)}
-              />
-            </dl>
-            <p className="mt-3 rounded-lg bg-marca-azul-suave px-3 py-2 text-xs text-marca-texto-suave">
-              {r.economiaVsConcorrenteAnual >= 0
-                ? "A Em Conta entrega a maior economia nesta comparação."
-                : "Neste cenário o concorrente aparece à frente. Confira o custo por kWh informado."}
-            </p>
-          </Card>
-        ) : null}
+          </div>
+        </Card>
       </div>
 
       {/* Detalhamento por UC */}

@@ -18,6 +18,14 @@ const eslintConfig = [
       "@typescript-eslint/no-explicit-any": "error",
     },
   },
+  {
+    // Scripts de linha de comando (migração, seed): a saída no terminal É a
+    // interface deles. `console.log` aqui é o comportamento correto.
+    files: ["scripts/**/*.mjs"],
+    rules: {
+      "no-console": "off",
+    },
+  },
 ];
 
 export default eslintConfig;

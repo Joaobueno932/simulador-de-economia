@@ -4,20 +4,28 @@
  * Etapa 2 — Unidades consumidoras.
  *
  * Cards dinâmicos em vez das 10 colunas fixas da planilha. Consumo de ponta e
- * demanda só aparecem em média tensão; em baixa tensão os campos nem existem
- * (em vez de ficarem desabilitados e confundindo).
+ * demanda só aparecem em média tensão.
+ *
+ * DESCONTO: travado para o vendedor. Para editar, ele precisa de uma senha de
+ * uso único emitida por um admin/gestor. Admin e gestor editam direto.
+ * A trava real é do servidor — aqui só refletimos o estado.
  */
 
-import { Copy, Plus, Trash2, Zap } from "lucide-react";
+import { Copy, Lock, Plus, Trash2, Unlock, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { Botao, Campo, Card, MensagemErro, SectionTitle, Select } from "./ui";
 import { MAX_UCS } from "./useSimulacao";
-import { CONFIG } from "@/domain/simulator/config";
+import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import { calcularCosip } from "@/domain/simulator/tariffs";
-import { formatarKwh, formatarMoeda } from "@/domain/simulator/format";
+import { formatarKwh, formatarMoeda, formatarPercentual } from "@/domain/simulator/format";
 import { unidadeConsumidoraSchema } from "@/domain/simulator/validation";
-import type { Classificacao, Ligacao, ResultadoUC, UnidadeConsumidora } from "@/domain/simulator/types";
+import type {
+  Classificacao,
+  Ligacao,
+  ResultadoUC,
+  UnidadeConsumidora,
+} from "@/domain/simulator/types";
 
 const CLASSIFICACOES: readonly { value: Classificacao; label: string }[] = [
   { value: "B1", label: "B1 — Residencial" },
@@ -49,6 +57,9 @@ function CardUC({
   onDuplicar,
   onRemover,
   tentouAvancar,
+  descontoEditavel,
+  onPedirLiberacao,
+  config,
 }: {
   uc: UnidadeConsumidora;
   resultado: ResultadoUC;
@@ -59,6 +70,9 @@ function CardUC({
   onDuplicar: () => void;
   onRemover: () => void;
   tentouAvancar: boolean;
+  descontoEditavel: boolean;
+  onPedirLiberacao: () => void;
+  config: ConfiguracaoSimulador;
 }) {
   const [tocado, setTocado] = useState(false);
   const mostrarErros = tocado || tentouAvancar;
@@ -74,13 +88,8 @@ function CardUC({
   const erroDe = (campo: string) => (mostrarErros ? erros[campo] : undefined);
 
   const ehMT = uc.ligacao === "MEDIA_TENSAO";
-
-  // COSIP sugerida pela tabela — mostrada como ajuda quando o consultor sobrescreve.
-  const cosipTabela = calcularCosip(uc.classificacao, uc.consumoForaPonta);
-
-  // Alerta (não erro): consumo abaixo do mínimo faturável não gera compensação.
-  const abaixoDoMinimo =
-    !ehMT && uc.consumoForaPonta > 0 && resultado.consumoCompensavel === 0;
+  const cosipTabela = calcularCosip(uc.classificacao, uc.consumoForaPonta, config);
+  const abaixoDoMinimo = !ehMT && uc.consumoForaPonta > 0 && resultado.consumoCompensavel === 0;
 
   return (
     <Card className="relative">
@@ -130,7 +139,6 @@ function CardUC({
           value={uc.classificacao}
           onChange={(e) => {
             const classificacao = e.target.value as Classificacao;
-            // MT e média tensão andam juntas — ajusta a ligação para manter coerência.
             if (classificacao === "MT") {
               onChange({ classificacao, ligacao: "MEDIA_TENSAO" });
             } else if (uc.ligacao === "MEDIA_TENSAO") {
@@ -158,7 +166,6 @@ function CardUC({
             if (ligacao === "MEDIA_TENSAO") {
               onChange({ ligacao, classificacao: "MT" });
             } else {
-              // Saindo da média tensão, ponta e demanda deixam de existir.
               onChange({
                 ligacao,
                 classificacao: uc.classificacao === "MT" ? "B1" : uc.classificacao,
@@ -225,20 +232,49 @@ function CardUC({
           />
         ) : null}
 
-        <Campo
-          label="Desconto sobre a tarifa compensável"
-          type="number"
-          min={0}
-          max={99}
-          step="any"
-          inputMode="decimal"
-          value={uc.desconto === 0 ? "0" : String(Number((uc.desconto * 100).toFixed(4)))}
-          onChange={(e) => onChange({ desconto: paraNumero(e.target.value) / 100 })}
-          onBlur={() => setTocado(true)}
-          erro={erroDe("desconto")}
-          sufixo="%"
-          ajuda={`Padrão: ${CONFIG.descontoPadrao * 100}%. Deve ser menor que 100%.`}
-        />
+        {/* DESCONTO — travado para vendedor sem liberação. */}
+        {descontoEditavel ? (
+          <Campo
+            label="Desconto sobre a tarifa compensável"
+            type="number"
+            min={0}
+            max={99}
+            step="any"
+            inputMode="decimal"
+            value={uc.desconto === 0 ? "0" : String(Number((uc.desconto * 100).toFixed(4)))}
+            onChange={(e) => onChange({ desconto: paraNumero(e.target.value) / 100 })}
+            onBlur={() => setTocado(true)}
+            erro={erroDe("desconto")}
+            sufixo="%"
+            icone={<Unlock aria-hidden="true" className="size-3.5 text-marca-verde" />}
+            ajuda={`Padrão: ${formatarPercentual(config.descontoPadrao, 0)}. Deve ser menor que 100%.`}
+          />
+        ) : (
+          <div>
+            <span className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-marca-texto">
+              Desconto sobre a tarifa compensável
+              <Lock aria-hidden="true" className="size-3.5 text-marca-texto-suave" />
+            </span>
+
+            <div className="flex items-center gap-2">
+              <div className="flex flex-1 items-center justify-between rounded-xl border-2 border-marca-borda bg-slate-100 px-3.5 py-2.5">
+                <span className="text-base font-bold tabular-nums text-marca-texto-suave">
+                  {formatarPercentual(uc.desconto, 1)}
+                </span>
+                <span className="text-sm font-medium text-marca-texto-suave">%</span>
+              </div>
+
+              <Botao variante="sutil" onClick={onPedirLiberacao} className="shrink-0">
+                <Lock aria-hidden="true" className="size-4" />
+                Liberar
+              </Botao>
+            </div>
+
+            <p className="mt-1.5 text-xs text-marca-texto-suave">
+              Para alterar o desconto, peça uma senha de liberação ao seu gestor.
+            </p>
+          </div>
+        )}
 
         <Campo
           label="COSIP da conta (opcional)"
@@ -262,26 +298,6 @@ function CardUC({
               : `Substituindo a tabela (${formatarMoeda(cosipTabela)}) pelo valor da conta.`
           }
         />
-
-        <Campo
-          label="Custo por kWh do concorrente (opcional)"
-          type="number"
-          min={0}
-          step="any"
-          inputMode="decimal"
-          value={uc.custoKwhConcorrente === null ? "" : String(uc.custoKwhConcorrente)}
-          onChange={(e) =>
-            onChange({
-              custoKwhConcorrente:
-                e.target.value.trim() === "" ? null : paraNumero(e.target.value),
-            })
-          }
-          onBlur={() => setTocado(true)}
-          erro={erroDe("custoKwhConcorrente")}
-          sufixo="R$/kWh"
-          placeholder="—"
-          ajuda="Preencha para comparar a Em Conta com outra geradora."
-        />
       </div>
 
       {abaixoDoMinimo ? (
@@ -303,6 +319,9 @@ export function EtapaUnidades({
   onDuplicar,
   onRemover,
   tentouAvancar,
+  descontoEditavel,
+  onPedirLiberacao,
+  config,
 }: {
   unidades: readonly UnidadeConsumidora[];
   resultados: readonly ResultadoUC[];
@@ -311,6 +330,9 @@ export function EtapaUnidades({
   onDuplicar: (id: string) => void;
   onRemover: (id: string) => void;
   tentouAvancar: boolean;
+  descontoEditavel: boolean;
+  onPedirLiberacao: () => void;
+  config: ConfiguracaoSimulador;
 }) {
   const noLimite = unidades.length >= MAX_UCS;
 
@@ -340,6 +362,9 @@ export function EtapaUnidades({
           onDuplicar={() => onDuplicar(uc.id)}
           onRemover={() => onRemover(uc.id)}
           tentouAvancar={tentouAvancar}
+          descontoEditavel={descontoEditavel}
+          onPedirLiberacao={onPedirLiberacao}
+          config={config}
         />
       ))}
 

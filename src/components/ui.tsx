@@ -82,9 +82,19 @@ interface CampoProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
   ajuda?: string;
   /** Sufixo visual dentro do campo, ex.: "kWh". */
   sufixo?: string;
+  /** Ícone ao lado do rótulo — ex.: cadeado em campo travado. */
+  icone?: ReactNode;
 }
 
-export function Campo({ label, erro, ajuda, sufixo, className = "", ...props }: CampoProps) {
+export function Campo({
+  label,
+  erro,
+  ajuda,
+  sufixo,
+  icone,
+  className = "",
+  ...props
+}: CampoProps) {
   const id = useId();
   const erroId = `${id}-erro`;
   const ajudaId = `${id}-ajuda`;
@@ -93,8 +103,12 @@ export function Campo({ label, erro, ajuda, sufixo, className = "", ...props }: 
 
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-marca-texto">
+      <label
+        htmlFor={id}
+        className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-marca-texto"
+      >
         {label}
+        {icone ? <span className="text-marca-texto-suave">{icone}</span> : null}
       </label>
 
       <div className="relative">

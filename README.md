@@ -7,16 +7,72 @@ real e baixa a proposta comercial em PDF (A4, uma página, texto vetorial).
 As regras extraídas da planilha estão em **[DOCUMENTACAO-REGRAS-PLANILHA.md](DOCUMENTACAO-REGRAS-PLANILHA.md)** —
 leia antes de mexer nas fórmulas.
 
-## Comandos
+## Acesso e papéis
+
+O sistema tem login. Três papéis:
+
+| Papel | Simula | Configurações | Cria usuários | Desconto | Consultor da proposta |
+|---|---|---|---|---|---|
+| **Admin** | sim | edita | admin, gestor e vendedor | edita livre | escolhe o vendedor |
+| **Gestor** | sim | edita | **só vendedores** | edita livre | escolhe o vendedor |
+| **Vendedor** | sim | não vê | não | **travado** — precisa de senha | sempre ele mesmo |
+
+Vendedores são vinculados a uma instituição: **SEMAPA**, **FIEMS** ou **ADILSON**.
+
+### Senha de uso único do desconto
+
+O desconto é travado para o vendedor. Para alterá-lo, um admin/gestor gera em
+**Administração → Senhas de desconto** um código de 6 dígitos **para aquele vendedor**. O
+código:
+
+- vale **15 minutos**;
+- **morre no primeiro uso**;
+- só funciona **para o vendedor escolhido**;
+- é substituído se uma nova senha for gerada para o mesmo vendedor.
+
+A liberação fica registrada **na sessão, no servidor**. Isso é o que importa: destravar o
+campo no navegador não adianta nada, porque a rota do PDF recusa (HTTP 403) qualquer
+desconto fora do padrão sem a liberação na sessão.
+
+## Primeira execução
 
 ```bash
 npm install
-npm run dev        # http://localhost:3000
-npm run build      # build de produção
-npm start          # serve o build
-npm test           # 103 testes (Vitest)
-npm run lint       # ESLint
-npm run typecheck  # tsc --noEmit
+cp .env.example .env.local     # preencha DATABASE_URL, ADMIN_EMAIL e ADMIN_SENHA
+
+npm run db:migrate             # cria as tabelas (idempotente — pode repetir)
+npm run db:seed-admin          # cria o seu usuário admin
+
+npm run dev                    # http://localhost:3000
+```
+
+### Banco de dados
+
+Postgres. Em produção (Vercel), use **Neon** ou **Supabase** e a string do **pooler** — em
+serverless o número de conexões estoura rápido com a conexão direta.
+
+Para desenvolver na sua máquina, sobe um Postgres em Docker:
+
+```bash
+docker run -d --name simulador-pg \
+  -e POSTGRES_PASSWORD=devpass -e POSTGRES_USER=simulador -e POSTGRES_DB=simulador \
+  -p 55433:5432 postgres:16-alpine
+```
+
+Sempre que o esquema mudar, rode `npm run db:migrate` de novo — ele usa
+`CREATE TABLE IF NOT EXISTS` e `ADD COLUMN IF NOT EXISTS`, então não destrói dado nenhum.
+
+## Comandos
+
+```bash
+npm run dev            # desenvolvimento
+npm run build          # build de produção
+npm start              # serve o build
+npm test               # 130 testes (Vitest)
+npm run lint           # ESLint
+npm run typecheck      # tsc --noEmit
+npm run db:migrate     # aplica o esquema
+npm run db:seed-admin  # cria/atualiza o admin
 ```
 
 ### Chromium para o PDF
@@ -35,28 +91,59 @@ Sem essa variável, o sistema tenta nesta ordem: Chromium do Puppeteer →
 
 ## Onde ficam as coisas
 
+### Domínio (puro, sem React, sem banco)
+
 | Caminho | Papel |
 |---|---|
-| `src/domain/simulator/config.ts` | **Todas** as tarifas, impostos, bandeiras, faixas de COSIP e constantes da usina. É aqui que se atualiza tarifa. |
+| `src/domain/simulator/config.ts` | Valores **padrão** das tarifas (os da planilha). Semente do banco. |
+| `src/domain/simulator/configSchema.ts` | Zod da configuração. Nada inválido entra no cálculo. |
 | `src/domain/simulator/calculations.ts` | Motor de cálculo. Funções puras, uma por fórmula da planilha. |
 | `src/domain/simulator/tariffs.ts` | Buscas em tabela (COSIP, gross-up de imposto, bandeiras). |
 | `src/domain/simulator/validation.ts` | Schemas Zod — usados no formulário **e** no servidor. |
 | `src/domain/simulator/format.ts` | Formatação pt-BR. Único lugar que arredonda. |
-| `src/domain/simulator/calculations.test.ts` | 103 testes, incluindo o caso de regressão da planilha. |
-| `src/components/Proposta.tsx` | **O componente do PDF.** Estilos inline; renderiza igual no navegador e no servidor. |
-| `src/app/proposta/preview/page.tsx` | Pré-visualização da proposta. |
-| `src/app/api/proposta/pdf/route.ts` | **A rota do PDF.** Revalida e recalcula no servidor. |
+| `src/domain/auth/types.ts` | **Papéis e permissões.** Quem pode o quê. Servidor e UI usam as mesmas funções. |
+
+### Servidor (só roda no Node — `server-only`)
+
+| Caminho | Papel |
+|---|---|
+| `src/server/db/schema.sql` | Esquema do Postgres. |
+| `src/server/auth.ts` | Login, sessão, hash de senha, liberação do desconto. |
+| `src/server/configuracao.ts` | Lê/grava a config no banco, sempre validando. |
+| `src/server/usuarios.ts` | CRUD de usuários, com as permissões aplicadas. |
+| `src/server/senhasDesconto.ts` | Senhas de uso único (emissão e consumo). |
 | `src/server/pdf.ts` | Puppeteer + `renderToStaticMarkup` + assets em base64. |
+| `src/app/api/proposta/pdf/route.ts` | **A rota do PDF.** Revalida, recalcula e impõe as regras. |
+| `src/middleware.ts` | Corte rápido por cookie. **Não** é a autorização de verdade. |
+
+### Interface
+
+| Caminho | Papel |
+|---|---|
+| `src/components/Proposta.tsx` | **O componente do PDF.** Estilos inline; renderiza igual no navegador e no servidor. |
+| `src/components/Simulador.tsx` | O assistente de 3 etapas. |
+| `src/components/admin/` | Configurações, usuários e senhas de desconto. |
 
 ## Como atualizar tarifas
 
-Não existe tela de configuração — é **de propósito**. Tarifa, imposto, bandeira, faixa de
-COSIP, desconto padrão, validade da proposta e dados da usina vivem todos em
-`src/domain/simulator/config.ts`, num único objeto tipado. Edite lá, rode `npm test` para
-conferir que o caso de regressão continua fechando, e o simulador, os testes e o PDF passam
-a usar os novos valores juntos.
+Pela tela: **Administração → Configurações** (admin ou gestor). Tarifas, impostos,
+bandeiras, faixas de COSIP, desconto padrão, validade da proposta, dados da usina e do
+rodapé — tudo editável, validado com Zod antes de gravar, e passa a valer na hora para a
+tela, o cálculo e o PDF.
+
+Os valores de `src/domain/simulator/config.ts` continuam sendo os **padrões da planilha**:
+servem de semente e de rede de segurança (se a config do banco ficar inválida, o sistema cai
+neles em vez de quebrar). O botão *Restaurar padrão* volta para eles.
 
 ## Decisões que valem saber
+
+**A UI não protege nada.** Esconder um botão é conveniência. Toda regra — papel, desconto,
+consultor, data — é imposta de novo no servidor. O caso concreto: um vendedor pode mandar
+`desconto: 0.9` direto para `/api/proposta/pdf`; a rota responde **403** porque a sessão
+dele não tem liberação. Há teste ponta a ponta exatamente para isso.
+
+**Data e validade não vêm do formulário.** A rota do PDF sobrescreve com a data de hoje
+(servidor) e a validade da configuração. Mexer no HTML não muda o que sai no PDF.
 
 **Precisão.** O Excel calcula em IEEE-754 double, igual ao `number` do JavaScript. Usar
 `decimal.js` afastaria o resultado da planilha em vez de aproximá-lo. Cálculo interno em
@@ -79,12 +166,24 @@ reproduz os números. Preservado e sinalizado no código.
 **O PDF não é screenshot.** O componente é renderizado para HTML e impresso pelo Chromium
 em A4 — o texto sai vetorial e selecionável.
 
+**Senhas nunca são recuperáveis.** No banco só existe o hash (bcrypt para senha de usuário,
+SHA-256 para o código de 6 dígitos). O código aparece **uma vez** para quem o gerou. Não há
+tela que o mostre de novo — porque não há como.
+
 ## Verificação feita
 
-- 103/103 testes passando, incluindo o caso de regressão completo da planilha.
+- **130/130 testes** (Vitest), incluindo o caso de regressão completo da planilha e a
+  matriz de permissões dos três papéis.
+- **34 checagens ponta a ponta** contra Postgres real e o build de produção, cobrindo o
+  abuso e não só o caminho feliz:
+  - vendedor forjando `desconto: 0.9` direto na API → **403**;
+  - senha de uso único **reutilizada** → 400;
+  - senha de um vendedor usada por **outro** → 400;
+  - senha **expirada** (linha envelhecida no banco) → 400, e o desconto segue travado;
+  - gestor tentando criar gestor/admin → 403; tentando desativar o admin → 403;
+  - desativar um usuário **derruba a sessão dele** na hora;
+  - e-mail inexistente e senha errada devolvem a **mesma** mensagem (não vaza quem existe);
+  - config inválida (desconto de 150%) → 400, não entra no banco.
 - TypeScript e ESLint sem erros; build de produção OK.
-- PDF gerado pela rota real: 1 página, 595,0 × 841,9 pt (A4 exato), 64 itens de texto
-  vetorial, todos os valores da planilha conferidos.
-- App dirigido de ponta a ponta no navegador: as 3 etapas, sem rolagem horizontal a 390 px,
-  sem erro de console, sem 404.
-- Servidor rejeita desconto de 100%, consumo negativo e CPF inválido (HTTP 400).
+- PDF: 1 página, 595,0 × 841,9 pt (A4 exato), texto vetorial, valores da planilha conferidos.
+- Telas conferidas no navegador em cada papel, sem erro de console.

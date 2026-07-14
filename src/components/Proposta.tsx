@@ -17,7 +17,7 @@
  *    que nada seja cortado nem transborde da página A4.
  */
 
-import { CONFIG } from "@/domain/simulator/config";
+import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
 import {
   formatarData,
   formatarDecimal,
@@ -258,10 +258,13 @@ function GraficoBandeiras({ r }: { r: ResultadoSimulacao }) {
 export function Proposta({
   cliente,
   r,
+  config = CONFIG,
   assets = ASSETS_WEB,
 }: {
   cliente: DadosCliente;
   r: ResultadoSimulacao;
+  /** Config vigente (vem do banco no servidor). */
+  config?: ConfiguracaoSimulador;
   assets?: AssetsProposta;
 }) {
   const validade = somarDias(cliente.dataProposta, cliente.validadeDias);
@@ -526,7 +529,7 @@ export function Proposta({
 
               <div>
                 <div style={{ fontSize: "8.4pt", fontWeight: 800, color: AZUL }}>
-                  FATURA {CONFIG.institucional.distribuidora.toUpperCase()}
+                  FATURA {config.institucional.distribuidora.toUpperCase()}
                 </div>
                 <div style={{ fontSize: "12pt", fontWeight: 800, color: AZUL }}>
                   {formatarMoeda(r.valorPagoDistribuidora)}
@@ -689,7 +692,7 @@ export function Proposta({
       {/* ================= OBSERVAÇÕES ================= */}
       <section style={{ padding: "3mm 8mm 0" }}>
         <ul style={{ margin: 0, paddingLeft: "4mm", listStyle: "none" }}>
-          {CONFIG.observacoesProposta.map((obs) => (
+          {config.observacoesProposta.map((obs) => (
             <li
               key={obs}
               style={{
@@ -759,7 +762,7 @@ export function Proposta({
                 letterSpacing: "0.02em",
               }}
             >
-              {CONFIG.institucional.whatsapp}
+              {config.institucional.whatsapp}
             </div>
             <div style={{ fontSize: "5.8pt", color: CINZA, marginTop: "1.5mm" }}>
               Emitida em {formatarData(cliente.dataProposta)} · Válida até{" "}
