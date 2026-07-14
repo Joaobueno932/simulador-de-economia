@@ -61,8 +61,42 @@ export function podeVerHistoricoDeTodos(papel: Papel): boolean {
   return podeAdministrar(papel);
 }
 
+/**
+ * Ver as instituições (SEMAPA, FIEMS, ADILSON).
+ *
+ * Elas existem só para as métricas do gestor — o vendedor não precisa saber a
+ * que instituição está vinculado, e mostrar isso a ele só gera pergunta.
+ */
+export function podeVerInstituicoes(papel: Papel): boolean {
+  return podeAdministrar(papel);
+}
+
+/**
+ * Prepara o usuário para ir ao navegador.
+ *
+ * Para o vendedor, APAGA as instituições — não basta esconder no HTML: o objeto
+ * viaja no payload da página e apareceria no DevTools. O que não deve ser visto
+ * não é enviado.
+ */
+export function usuarioParaCliente(usuario: Usuario): Usuario {
+  if (podeVerInstituicoes(usuario.papel)) return usuario;
+  return { ...usuario, instituicoes: [] };
+}
+
 /** Redefinir a senha de outro usuário para a senha padrão. */
 export function podeResetarSenha(papel: Papel): boolean {
+  return podeAdministrar(papel);
+}
+
+/**
+ * Remover uma proposta do histórico.
+ *
+ * SÓ admin e gestor. Deixar o vendedor apagar as próprias propostas destruiria
+ * a auditoria — ele poderia esconder o que fez. A exclusão existe para limpar
+ * lixo de teste, não para reescrever o passado; e a própria exclusão é
+ * registrada no histórico, com quem apagou e qual cliente.
+ */
+export function podeExcluirProposta(papel: Papel): boolean {
   return podeAdministrar(papel);
 }
 

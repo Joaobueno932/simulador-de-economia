@@ -8,12 +8,13 @@
  * mudado depois.
  */
 
-import { ExternalLink, Loader2, Users } from "lucide-react";
+import { ExternalLink, Loader2, Trash2, TriangleAlert, Users, X } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Avatar } from "../Avatar";
-import { Card, SectionTitle } from "../ui";
+import { Botao, Card, SectionTitle } from "../ui";
 import { BarraFiltros, FILTROS_VAZIOS, paraQuery, type EstadoFiltros } from "./Filtros";
+import { podeExcluirProposta, type Usuario } from "@/domain/auth/types";
 import {
   formatarDesconto,
   formatarDocumento,
@@ -28,11 +29,104 @@ function quando(iso: string): string {
   return new Date(iso).toLocaleDateString("pt-BR");
 }
 
-export function AbaClientes({ vendedores }: { vendedores: readonly UsuarioListado[] }) {
+/**
+ * Confirmação da remoção.
+ *
+ * É irreversível e mexe nas métricas do dashboard, então não pode ser um clique
+ * só — e o texto diz exatamente o que vai acontecer.
+ */
+function ConfirmarRemocao({
+  proposta,
+  ocupado,
+  onConfirmar,
+  onCancelar,
+}: {
+  proposta: PropostaListada;
+  ocupado: boolean;
+  onConfirmar: () => void;
+  onCancelar: () => void;
+}) {
+  return (
+    <div
+      className="fixed inset-0 z-50 grid place-items-center bg-marca-texto/60 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="titulo-remover"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onCancelar();
+      }}
+    >
+      <div className="w-full max-w-md rounded-card border border-marca-borda bg-white p-5 shadow-xl">
+        <div className="mb-4 flex items-start justify-between gap-3">
+          <div className="flex items-start gap-3">
+            <span className="grid size-10 shrink-0 place-items-center rounded-xl bg-red-50 text-red-700">
+              <TriangleAlert aria-hidden="true" className="size-5" />
+            </span>
+            <div>
+              <h2 id="titulo-remover" className="font-bold text-marca-texto">
+                Remover do histórico?
+              </h2>
+              <p className="mt-0.5 text-sm text-marca-texto-suave">
+                Proposta de <strong className="font-semibold">{proposta.clienteNome}</strong>,
+                de {quando(proposta.criadaEm)}.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={onCancelar}
+            aria-label="Fechar"
+            className="rounded-lg p-1 text-marca-texto-suave hover:bg-slate-100"
+          >
+            <X aria-hidden="true" className="size-5" />
+          </button>
+        </div>
+
+        <ul className="list-inside list-disc space-y-1 rounded-xl bg-slate-50 px-3.5 py-3 text-xs text-marca-texto-suave">
+          <li>A proposta some da lista de clientes e do histórico.</li>
+          <li>O PDF dela deixa de ser acessível.</li>
+          <li>As métricas do dashboard são recalculadas sem ela.</li>
+          <li>
+            Fica registrado que <strong className="font-semibold">você</strong> a removeu.
+          </li>
+        </ul>
+
+        <p className="mt-3 text-xs text-marca-texto-suave">
+          Use para limpar simulações de teste. Não há como desfazer.
+        </p>
+
+        <div className="mt-5 flex gap-2">
+          <Botao variante="sutil" onClick={onCancelar} disabled={ocupado} className="flex-1">
+            Cancelar
+          </Botao>
+          <Botao variante="perigo" onClick={onConfirmar} disabled={ocupado} className="flex-1">
+            {ocupado ? (
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <Trash2 aria-hidden="true" className="size-4" />
+            )}
+            Remover
+          </Botao>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+export function AbaClientes({
+  ator,
+  vendedores,
+}: {
+  ator: Usuario;
+  vendedores: readonly UsuarioListado[];
+}) {
   const [filtros, setFiltros] = useState<EstadoFiltros>(FILTROS_VAZIOS);
   const [propostas, setPropostas] = useState<PropostaListada[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
+  const [aRemover, setARemover] = useState<PropostaListada | null>(null);
+  const [removendo, setRemovendo] = useState(false);
 
   const carregar = useCallback(async (f: EstadoFiltros) => {
     setCarregando(true);
@@ -62,6 +156,31 @@ export function AbaClientes({ vendedores }: { vendedores: readonly UsuarioListad
   }, [filtros, carregar]);
 
   const economiaTotal = propostas.reduce((s, p) => s + p.economiaAnual, 0);
+
+  const podeRemover = podeExcluirProposta(ator.papel);
+
+  async function remover() {
+    if (!aRemover) return;
+    setRemovendo(true);
+    setErro(null);
+
+    try {
+      const resposta = await fetch(`/api/propostas/${aRemover.id}`, { method: "DELETE" });
+      const dados = (await resposta.json().catch(() => null)) as { erro?: string } | null;
+
+      if (!resposta.ok) {
+        setErro(dados?.erro ?? "Não foi possível remover a proposta.");
+        return;
+      }
+
+      setPropostas((atual) => atual.filter((p) => p.id !== aRemover.id));
+      setARemover(null);
+    } catch {
+      setErro("Não foi possível conectar.");
+    } finally {
+      setRemovendo(false);
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -118,13 +237,16 @@ export function AbaClientes({ vendedores }: { vendedores: readonly UsuarioListad
                     "Desconto",
                     "Data",
                     "Proposta",
-                  ].map((h) => (
+                    ...(podeRemover ? [""] : []),
+                  ].map((h, i) => (
                     <th
-                      key={h}
+                      // A última coluna (ações) não tem título — daí a chave
+                      // combinar rótulo e índice.
+                      key={`${h}-${i}`}
                       scope="col"
                       className="whitespace-nowrap px-2 py-2 text-xs font-bold uppercase tracking-wide text-marca-texto-suave"
                     >
-                      {h}
+                      {h ? h : <span className="sr-only">Ações</span>}
                     </th>
                   ))}
                 </tr>
@@ -185,13 +307,43 @@ export function AbaClientes({ vendedores }: { vendedores: readonly UsuarioListad
                         <ExternalLink aria-hidden="true" className="size-3" />
                       </a>
                     </td>
+
+                    {podeRemover ? (
+                      <td className="px-2 py-2.5">
+                        <button
+                          type="button"
+                          onClick={() => setARemover(p)}
+                          aria-label={`Remover do histórico a proposta de ${p.clienteNome}`}
+                          title="Remover do histórico"
+                          className="grid size-8 place-items-center rounded-lg text-marca-texto-suave transition-colors hover:bg-red-50 hover:text-red-700"
+                        >
+                          <Trash2 aria-hidden="true" className="size-4" />
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
         )}
+
+        {podeRemover ? (
+          <p className="mt-3 text-xs text-marca-texto-suave">
+            Use a lixeira para tirar do histórico as simulações de teste. A remoção é
+            registrada e não pode ser desfeita.
+          </p>
+        ) : null}
       </Card>
+
+      {aRemover ? (
+        <ConfirmarRemocao
+          proposta={aRemover}
+          ocupado={removendo}
+          onConfirmar={remover}
+          onCancelar={() => setARemover(null)}
+        />
+      ) : null}
     </div>
   );
 }

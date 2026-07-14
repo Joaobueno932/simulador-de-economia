@@ -12,7 +12,7 @@ import { Simulador } from "@/components/Simulador";
 import { sessaoAtual } from "@/server/auth";
 import { carregarConfiguracao } from "@/server/configuracao";
 import { listarVendedoresAtivos } from "@/server/usuarios";
-import { podeEscolherConsultor } from "@/domain/auth/types";
+import { podeEscolherConsultor, usuarioParaCliente } from "@/domain/auth/types";
 
 // Sessão e config mudam por requisição: nada de cache estático.
 export const dynamic = "force-dynamic";
@@ -34,8 +34,13 @@ export default async function Page() {
 
   return (
     <Simulador
-      usuario={usuario}
+      // `usuarioParaCliente` apaga as instituições quando o usuário é vendedor:
+      // elas servem só às métricas do gestor. Apagar aqui (e não esconder na
+      // tela) é o que impede o dado de aparecer no payload da página.
+      usuario={usuarioParaCliente(usuario)}
       config={config}
+      // A lista de vendedores só existe para admin/gestor (que PODEM ver as
+      // instituições), então aqui elas seguem normalmente.
       vendedores={vendedores.map((v) => ({
         id: v.id,
         nome: v.nome,

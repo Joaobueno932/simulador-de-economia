@@ -128,7 +128,7 @@ export function Admin({
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6">
         {aba === "dashboard" ? <AbaDashboard vendedores={vendedores} /> : null}
-        {aba === "clientes" ? <AbaClientes vendedores={vendedores} /> : null}
+        {aba === "clientes" ? <AbaClientes ator={usuario} vendedores={vendedores} /> : null}
         {aba === "historico" ? <AbaHistorico vendedores={vendedores} /> : null}
 
         {aba === "usuarios" ? (

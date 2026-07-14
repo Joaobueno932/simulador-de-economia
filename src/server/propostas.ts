@@ -15,7 +15,12 @@ import "server-only";
 import { consultar, consultarUm } from "./db";
 import { ErroProibido } from "./auth";
 import { ErroDeNegocio } from "./usuarios";
-import { podeVerHistoricoDeTodos, podeVerProposta, type Usuario } from "@/domain/auth/types";
+import {
+  podeExcluirProposta,
+  podeVerHistoricoDeTodos,
+  podeVerProposta,
+  type Usuario,
+} from "@/domain/auth/types";
 import { validarConfiguracao } from "@/domain/simulator/configSchema";
 import { simulacaoArmazenadaSchema } from "@/domain/simulator/validation";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
@@ -360,4 +365,39 @@ export function exigirAcessoAoDashboard(ator: Usuario): void {
   if (!podeVerHistoricoDeTodos(ator.papel)) {
     throw new ErroProibido("Você não tem acesso ao dashboard.");
   }
+}
+
+/**
+ * Remove uma proposta do histórico.
+ *
+ * Serve para limpar simulações de teste, que poluem o dashboard e as métricas.
+ *
+ * Apaga TAMBÉM o evento "Gerou uma proposta" correspondente. Sem isso, a linha
+ * sumiria da aba Clientes mas continuaria aparecendo no Histórico — o lixo só
+ * mudaria de lugar. (A FK é `ON DELETE SET NULL`, então o evento sobreviveria
+ * órfão, sem link para o PDF.)
+ *
+ * A EXCLUSÃO EM SI é registrada por quem chama esta função — quem apagou, qual
+ * cliente e quando. Limpar teste não é o mesmo que apagar rastro.
+ *
+ * Devolve o nome do cliente, para a descrição do evento.
+ */
+export async function excluirProposta(ator: Usuario, id: number): Promise<string> {
+  if (!podeExcluirProposta(ator.papel)) {
+    throw new ErroProibido("Você não pode remover propostas do histórico.");
+  }
+
+  const linha = await consultarUm<{ cliente_nome: string }>(
+    `SELECT cliente_nome FROM propostas WHERE id = $1`,
+    [id],
+  );
+  if (!linha) throw new ErroDeNegocio("Proposta não encontrada.");
+
+  await consultar(
+    `DELETE FROM eventos WHERE proposta_id = $1 AND tipo = 'proposta_gerada'`,
+    [id],
+  );
+  await consultar(`DELETE FROM propostas WHERE id = $1`, [id]);
+
+  return linha.cliente_nome;
 }

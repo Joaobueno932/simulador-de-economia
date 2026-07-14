@@ -19,6 +19,7 @@ export type TipoEvento =
   | "senha_desconto_emitida"
   | "senha_desconto_usada"
   | "proposta_gerada"
+  | "proposta_excluida"
   | "foto_alterada";
 
 export const ROTULO_EVENTO: Readonly<Record<TipoEvento, string>> = {
@@ -33,12 +34,14 @@ export const ROTULO_EVENTO: Readonly<Record<TipoEvento, string>> = {
   senha_desconto_emitida: "Emitiu senha de desconto",
   senha_desconto_usada: "Usou senha de desconto",
   proposta_gerada: "Gerou uma proposta",
+  proposta_excluida: "Removeu uma proposta do histórico",
   foto_alterada: "Alterou a foto de perfil",
 };
 
 /** Tipos oferecidos no filtro do histórico, na ordem em que aparecem. */
 export const TIPOS_EVENTO: readonly TipoEvento[] = [
   "proposta_gerada",
+  "proposta_excluida",
   "senha_desconto_emitida",
   "senha_desconto_usada",
   "login",

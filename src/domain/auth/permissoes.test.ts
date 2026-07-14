@@ -9,11 +9,14 @@ import {
   podeEditarDescontoLivremente,
   podeEmitirSenhaDesconto,
   podeEscolherConsultor,
+  podeExcluirProposta,
   podeGerenciarUsuario,
   podeResetarSenha,
   podeVerHistoricoDeTodos,
+  podeVerInstituicoes,
   podeVerProposta,
   SENHA_PADRAO,
+  usuarioParaCliente,
   type Papel,
   type Usuario,
 } from "./types";
@@ -178,5 +181,37 @@ describe("instituições", () => {
   it("admin e gestor não têm instituição", () => {
     expect(usuario("admin").instituicoes).toEqual([]);
     expect(usuario("gestor").instituicoes).toEqual([]);
+  });
+
+  it("só admin e gestor VEEM as instituições", () => {
+    expect(podeVerInstituicoes("admin")).toBe(true);
+    expect(podeVerInstituicoes("gestor")).toBe(true);
+    expect(podeVerInstituicoes("vendedor")).toBe(false);
+  });
+
+  it("as instituições NÃO são enviadas ao vendedor (não basta esconder na tela)", () => {
+    const v = usuario("vendedor", 7, { instituicoes: ["SEMAPA", "FIEMS"] });
+    // O objeto que vai para o navegador não pode conter o dado — senão ele
+    // apareceria no payload da página, visível no DevTools.
+    expect(usuarioParaCliente(v).instituicoes).toEqual([]);
+    // E o resto do usuário continua intacto.
+    expect(usuarioParaCliente(v).nome).toBe(v.nome);
+    expect(usuarioParaCliente(v).papel).toBe("vendedor");
+  });
+
+  it("admin e gestor continuam recebendo as instituições", () => {
+    const g = usuario("gestor", 2);
+    expect(usuarioParaCliente(g)).toBe(g);
+    const a = usuario("admin", 1);
+    expect(usuarioParaCliente(a)).toBe(a);
+  });
+});
+
+describe("remover proposta do histórico", () => {
+  it("só admin e gestor removem", () => {
+    expect(podeExcluirProposta("admin")).toBe(true);
+    expect(podeExcluirProposta("gestor")).toBe(true);
+    // Se o vendedor pudesse, ele apagaria o próprio rastro.
+    expect(podeExcluirProposta("vendedor")).toBe(false);
   });
 });

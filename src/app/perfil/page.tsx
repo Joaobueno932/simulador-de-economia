@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 
 import { Perfil } from "@/components/Perfil";
+import { usuarioParaCliente } from "@/domain/auth/types";
 import { usuarioAtual } from "@/server/auth";
 
 export const dynamic = "force-dynamic";
@@ -14,5 +15,6 @@ export default async function PerfilPage() {
   if (!usuario) redirect("/login");
   if (usuario.senhaProvisoria) redirect("/trocar-senha");
 
-  return <Perfil usuario={usuario} />;
+  // Sem as instituições, se for vendedor — ver `usuarioParaCliente`.
+  return <Perfil usuario={usuarioParaCliente(usuario)} />;
 }
