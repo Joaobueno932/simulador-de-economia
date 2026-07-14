@@ -295,8 +295,8 @@ export function Simulador({
                 <span className="text-marca-amarelo">amplie o impacto.</span>
               </h1>
               <p className="mt-2 max-w-xl text-sm text-white/80 sm:text-base">
-                Simule quanto o seu cliente economiza gerando a própria energia — e gere a
-                proposta comercial em PDF na hora.
+                Simule quanto o seu cliente economiza com a Em Conta — e gere a proposta
+                comercial em PDF na hora.
               </p>
 
               <ul className="mt-5 flex flex-wrap gap-2">
