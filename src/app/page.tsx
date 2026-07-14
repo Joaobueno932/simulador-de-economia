@@ -7,16 +7,7 @@
  * Celular: uma etapa por vez, com a barra de navegação fixa embaixo.
  */
 
-import {
-  ArrowLeft,
-  ArrowRight,
-  Check,
-  FileDown,
-  Loader2,
-  RotateCcw,
-  Settings,
-  Sun,
-} from "lucide-react";
+import { ArrowLeft, ArrowRight, Check, FileDown, Loader2, RotateCcw, Sun } from "lucide-react";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 
@@ -174,19 +165,12 @@ export default function Page() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <Link
-              href="/configuracoes"
-              className="inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-marca-borda px-3.5 py-2 text-sm font-bold text-marca-texto transition-colors hover:border-marca-azul-claro hover:bg-marca-azul-suave"
-            >
-              <Settings aria-hidden="true" className="size-4" />
-              <span className="hidden sm:inline">Configurações</span>
-            </Link>
-            <Botao variante="sutil" onClick={limpar} title="Recomeçar a simulação">
-              <RotateCcw aria-hidden="true" className="size-4" />
-              <span className="hidden sm:inline">Limpar</span>
-            </Botao>
-          </div>
+          {/* Tarifas, impostos e faixas de COSIP são configurados em
+              src/domain/simulator/config.ts — não há tela de configuração. */}
+          <Botao variante="sutil" onClick={limpar} title="Recomeçar a simulação">
+            <RotateCcw aria-hidden="true" className="size-4" />
+            <span className="hidden sm:inline">Limpar</span>
+          </Botao>
         </div>
       </header>
 

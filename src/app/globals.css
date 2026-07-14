@@ -26,7 +26,9 @@
   --color-marca-laranja-suave: #fdf0e4;
 
   /* Neutros */
-  --color-marca-fundo: #f4f7fb;
+  /* Fundo verde pastel bem claro — sustentabilidade, sem competir com os
+     cards brancos nem com o azul institucional. */
+  --color-marca-fundo: #f1f8f1;
   --color-marca-texto: #1c2b3a;
   --color-marca-texto-suave: #5b6b7c;
   --color-marca-borda: #dfe6ee;

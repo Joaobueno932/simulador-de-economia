@@ -47,7 +47,14 @@ Sem essa variável, o sistema tenta nesta ordem: Chromium do Puppeteer →
 | `src/app/proposta/preview/page.tsx` | Pré-visualização da proposta. |
 | `src/app/api/proposta/pdf/route.ts` | **A rota do PDF.** Revalida e recalcula no servidor. |
 | `src/server/pdf.ts` | Puppeteer + `renderToStaticMarkup` + assets em base64. |
-| `src/app/configuracoes/page.tsx` | Conferência (leitura) de todos os parâmetros. |
+
+## Como atualizar tarifas
+
+Não existe tela de configuração — é **de propósito**. Tarifa, imposto, bandeira, faixa de
+COSIP, desconto padrão, validade da proposta e dados da usina vivem todos em
+`src/domain/simulator/config.ts`, num único objeto tipado. Edite lá, rode `npm test` para
+conferir que o caso de regressão continua fechando, e o simulador, os testes e o PDF passam
+a usar os novos valores juntos.
 
 ## Decisões que valem saber
 
