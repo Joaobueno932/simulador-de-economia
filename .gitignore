@@ -13,3 +13,7 @@ next-env.d.ts
 # DOCUMENTACAO-REGRAS-PLANILHA.md, então o arquivo não precisa ser versionado.
 *.xlsx
 *.xls
+
+# Pasta de trabalho com as imagens de instrução originais. As que o app serve
+# estão em public/instrucoes/ — versionar as duas seria duplicar os arquivos.
+instrução/

@@ -14,6 +14,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { calcularSimulacao } from "@/domain/simulator/calculations";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import { hojeISO } from "@/domain/simulator/format";
+import { MAX_UNIDADES } from "@/domain/simulator/validation";
 import type {
   DadosCliente,
   ResultadoSimulacao,
@@ -22,7 +23,12 @@ import type {
 } from "@/domain/simulator/types";
 
 const CHAVE_RASCUNHO = "em-conta:simulacao:v2";
-export const MAX_UCS = 10;
+
+/**
+ * Máximo de unidades consumidoras. Vem do domínio (`MAX_UNIDADES`), que é o
+ * mesmo limite que o servidor impõe — a tela e a API não podem divergir.
+ */
+export const MAX_UCS = MAX_UNIDADES;
 
 function novoId(): string {
   return `uc-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;

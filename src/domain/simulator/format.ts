@@ -60,6 +60,18 @@ export function formatarPercentual(fracao: number, casas = 2): string {
   );
 }
 
+/**
+ * Desconto: sempre INTEIRO, sem casa decimal. Fração 0,2 -> "20%".
+ *
+ * Tem função própria (em vez de `formatarPercentual(x, 0)` espalhado) porque é
+ * uma regra de negócio, não uma escolha de exibição: o desconto é um número
+ * inteiro em todo lugar — tela, proposta e histórico. Um único ponto garante
+ * que os três não divirjam.
+ */
+export function formatarDesconto(fracao: number): string {
+  return formatarPercentual(fracao, 0);
+}
+
 /** ISO `yyyy-mm-dd` -> `dd/mm/aaaa`, sem depender do fuso do servidor. */
 export function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.split("-");

@@ -14,11 +14,12 @@
 import { Copy, Lock, Plus, Trash2, Unlock, Zap } from "lucide-react";
 import { useState } from "react";
 
+import { AjudaFatura } from "./AjudaFatura";
 import { Botao, Campo, Card, MensagemErro, SectionTitle, Select } from "./ui";
 import { MAX_UCS } from "./useSimulacao";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import { calcularCosip } from "@/domain/simulator/tariffs";
-import { formatarKwh, formatarMoeda, formatarPercentual } from "@/domain/simulator/format";
+import { formatarDesconto, formatarKwh, formatarMoeda } from "@/domain/simulator/format";
 import { unidadeConsumidoraSchema } from "@/domain/simulator/validation";
 import type {
   Classificacao,
@@ -177,6 +178,7 @@ function CardUC({
           onBlur={() => setTocado(true)}
           erro={erroDe("ligacao")}
           opcoes={LIGACOES}
+          acao={<AjudaFatura campo="ligacao" />}
         />
 
         <Campo
@@ -191,6 +193,7 @@ function CardUC({
           erro={erroDe("consumoForaPonta")}
           sufixo="kWh"
           placeholder="0"
+          acao={ehMT ? undefined : <AjudaFatura campo="consumo" />}
           ajuda={
             ehMT
               ? "Consumo fora do horário de ponta."
@@ -239,15 +242,21 @@ function CardUC({
             type="number"
             min={0}
             max={99}
-            step="any"
-            inputMode="decimal"
-            value={uc.desconto === 0 ? "0" : String(Number((uc.desconto * 100).toFixed(4)))}
-            onChange={(e) => onChange({ desconto: paraNumero(e.target.value) / 100 })}
+            // Inteiro: 20%, não 20,5%. `step=1` + `inputMode=numeric` fazem o
+            // teclado do celular abrir sem vírgula, e o servidor recusa fração.
+            step={1}
+            inputMode="numeric"
+            value={uc.desconto === 0 ? "0" : String(Math.round(uc.desconto * 100))}
+            onChange={(e) => {
+              // Arredonda na borda: o valor que entra no domínio já é inteiro.
+              const pct = Math.round(paraNumero(e.target.value));
+              onChange({ desconto: pct / 100 });
+            }}
             onBlur={() => setTocado(true)}
             erro={erroDe("desconto")}
             sufixo="%"
             icone={<Unlock aria-hidden="true" className="size-3.5 text-marca-verde" />}
-            ajuda={`Padrão: ${formatarPercentual(config.descontoPadrao, 0)}. Deve ser menor que 100%.`}
+            ajuda={`Padrão: ${formatarDesconto(config.descontoPadrao)}. Número inteiro, menor que 100%.`}
           />
         ) : (
           <div>
@@ -257,11 +266,10 @@ function CardUC({
             </span>
 
             <div className="flex items-center gap-2">
-              <div className="flex flex-1 items-center justify-between rounded-xl border-2 border-marca-borda bg-slate-100 px-3.5 py-2.5">
+              <div className="flex flex-1 items-center rounded-xl border-2 border-marca-borda bg-slate-100 px-3.5 py-2.5">
                 <span className="text-base font-bold tabular-nums text-marca-texto-suave">
-                  {formatarPercentual(uc.desconto, 1)}
+                  {formatarDesconto(uc.desconto)}
                 </span>
-                <span className="text-sm font-medium text-marca-texto-suave">%</span>
               </div>
 
               <Botao variante="sutil" onClick={onPedirLiberacao} className="shrink-0">
@@ -291,6 +299,7 @@ function CardUC({
           onBlur={() => setTocado(true)}
           erro={erroDe("cosipOverride")}
           sufixo="R$"
+          acao={<AjudaFatura campo="cosip" />}
           placeholder={cosipTabela.toFixed(2)}
           ajuda={
             uc.cosipOverride === null

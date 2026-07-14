@@ -10,8 +10,20 @@ import {
   calcularUC,
 } from "./calculations";
 import { calcularCosip, fatorProjecao, tarifaComImposto } from "./tariffs";
-import { formatarMoeda, formatarPercentual, nomeArquivoProposta } from "./format";
-import { isDocumentoValido, simulacaoSchema, unidadeConsumidoraSchema } from "./validation";
+import {
+  formatarDesconto,
+  formatarMoeda,
+  formatarPercentual,
+  nomeArquivoProposta,
+} from "./format";
+import { validarConfiguracao } from "./configSchema";
+import {
+  isDocumentoValido,
+  MAX_UNIDADES,
+  simulacaoArmazenadaSchema,
+  simulacaoSchema,
+  unidadeConsumidoraSchema,
+} from "./validation";
 import type { Classificacao, Ligacao, Simulacao, UnidadeConsumidora } from "./types";
 
 /** Tolerância: 1 centavo. As diferenças reais são da ordem de 1e-13. */
@@ -564,12 +576,22 @@ describe("validação", () => {
     expect(isDocumentoValido("123")).toBe(false);
   });
 
-  it("exige ao menos uma UC e no máximo 10", () => {
+  it(`exige ao menos uma UC e no máximo ${MAX_UNIDADES}`, () => {
     expect(simulacaoSchema.safeParse(simulacao([])).success).toBe(false);
-    const onze = Array.from({ length: 11 }, (_, i) => uc({ id: `uc-${i}` }));
-    expect(simulacaoSchema.safeParse(simulacao(onze)).success).toBe(false);
-    const dez = Array.from({ length: 10 }, (_, i) => uc({ id: `uc-${i}` }));
-    expect(simulacaoSchema.safeParse(simulacao(dez)).success).toBe(true);
+
+    const acima = Array.from({ length: MAX_UNIDADES + 1 }, (_, i) => uc({ id: `uc-${i}` }));
+    expect(simulacaoSchema.safeParse(simulacao(acima)).success).toBe(false);
+
+    const noLimite = Array.from({ length: MAX_UNIDADES }, (_, i) => uc({ id: `uc-${i}` }));
+    expect(simulacaoSchema.safeParse(simulacao(noLimite)).success).toBe(true);
+  });
+
+  it("uma proposta JÁ GRAVADA com mais UCs que o limite atual continua válida", () => {
+    // Baixar o limite não pode invalidar o passado: o gestor precisa conseguir
+    // reabrir o PDF de uma proposta antiga.
+    const muitas = Array.from({ length: 10 }, (_, i) => uc({ id: `uc-${i}` }));
+    expect(simulacaoSchema.safeParse(simulacao(muitas)).success).toBe(false);
+    expect(simulacaoArmazenadaSchema.safeParse(simulacao(muitas)).success).toBe(true);
   });
 
   it("aceita a simulação de regressão inteira", () => {
@@ -601,10 +623,51 @@ describe("geração da proposta", () => {
   it("a proposta carrega todos os campos que o PDF exibe", () => {
     const t = calcularSimulacao(simulacao([uc({ cosipOverride: 48.58 })]));
     expect(t.descontoMedio).toBeCloseTo(0.2, 9);
-    expect(formatarPercentual(t.descontoMedio, 1)).toBe("20,0%");
+    expect(formatarDesconto(t.descontoMedio)).toBe("20%");
     expect(t.equivalenteKwp).toBeGreaterThan(0);
     expect(t.projecaoCincoAnos.vermelhaP2).toBeGreaterThan(t.projecaoCincoAnos.verde);
     expect(CONFIG.observacoesProposta).toHaveLength(3);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Desconto: número INTEIRO de porcento
+// ---------------------------------------------------------------------------
+describe("desconto é sempre um número inteiro de porcento", () => {
+  it("exibe sem casa decimal: 20%, não 20,0%", () => {
+    expect(formatarDesconto(0.2)).toBe("20%");
+    expect(formatarDesconto(0)).toBe("0%");
+    expect(formatarDesconto(0.35)).toBe("35%");
+    expect(formatarDesconto(0.99)).toBe("99%");
+  });
+
+  it("o schema aceita descontos inteiros", () => {
+    for (const pct of [0, 5, 20, 35, 99]) {
+      const r = unidadeConsumidoraSchema.safeParse({ ...uc(), desconto: pct / 100 });
+      expect(r.success, `${pct}% deveria ser aceito`).toBe(true);
+    }
+  });
+
+  it("o schema RECUSA fração de porcento (20,5%)", () => {
+    for (const frac of [0.205, 0.2075, 0.001]) {
+      const r = unidadeConsumidoraSchema.safeParse({ ...uc(), desconto: frac });
+      expect(r.success, `${frac * 100}% deveria ser recusado`).toBe(false);
+    }
+  });
+
+  it("não é confundido por erro de ponto flutuante (0,07 * 100 ≠ 7 exato)", () => {
+    // Casos onde `x * 100` não dá um inteiro exato em IEEE-754. A checagem usa
+    // tolerância justamente por isso — sem ela, 7% seria recusado.
+    for (const pct of [7, 29, 57, 83]) {
+      const r = unidadeConsumidoraSchema.safeParse({ ...uc(), desconto: pct / 100 });
+      expect(r.success, `${pct}% deveria ser aceito`).toBe(true);
+    }
+  });
+
+  it("o desconto padrão da configuração também precisa ser inteiro", () => {
+    const base = JSON.parse(JSON.stringify(CONFIG)) as Record<string, unknown>;
+    expect(() => validarConfiguracao({ ...base, descontoPadrao: 0.2 })).not.toThrow();
+    expect(() => validarConfiguracao({ ...base, descontoPadrao: 0.205 })).toThrow();
   });
 });
 

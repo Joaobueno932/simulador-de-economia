@@ -153,6 +153,7 @@ export async function criarUsuario(ator: Usuario, dados: NovoUsuario): Promise<U
 
 export interface EdicaoUsuario {
   nome?: string;
+  email?: string;
   instituicoes?: readonly Instituicao[];
   ativo?: boolean;
 }
@@ -182,6 +183,15 @@ export async function editarUsuario(
     }
   }
 
+  // Trocar o e-mail é trocar o login: não pode colidir com o de outra conta.
+  if (dados.email !== undefined) {
+    const emUso = await consultarUm<{ id: number }>(
+      `SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1) AND id <> $2`,
+      [dados.email.trim(), alvoId],
+    );
+    if (emUso) throw new ErroDeNegocio("Já existe um usuário com esse e-mail.");
+  }
+
   const campos: string[] = [];
   const valores: unknown[] = [];
   const add = (coluna: string, valor: unknown) => {
@@ -190,6 +200,7 @@ export async function editarUsuario(
   };
 
   if (dados.nome !== undefined) add("nome", dados.nome.trim());
+  if (dados.email !== undefined) add("email", dados.email.trim().toLowerCase());
   if (dados.ativo !== undefined) add("ativo", dados.ativo);
 
   if (campos.length > 0) {
@@ -249,6 +260,46 @@ export async function resetarSenha(ator: Usuario, alvoId: number): Promise<Usuar
   const atualizado = await buscarUsuario(alvoId);
   if (!atualizado) throw new ErroDeNegocio("Usuário não encontrado.");
   return atualizado;
+}
+
+/**
+ * Exclui o usuário de vez.
+ *
+ * O histórico SOBREVIVE: `propostas.usuario_id` e `propostas.vendedor_id` são
+ * `ON DELETE SET NULL`, e o nome do consultor fica gravado em texto na própria
+ * proposta. O gestor continua vendo o que foi vendido, mesmo depois de a conta
+ * sumir. Sessões, senhas de desconto e vínculos de instituição caem junto
+ * (CASCADE), que é o desejado.
+ *
+ * Quando não dá para excluir, o caminho é DESATIVAR — que já bloqueia o acesso
+ * e derruba as sessões.
+ */
+export async function excluirUsuario(ator: Usuario, alvoId: number): Promise<void> {
+  const alvo = await buscarUsuario(alvoId);
+  if (!alvo) throw new ErroDeNegocio("Usuário não encontrado.");
+
+  if (!podeGerenciarUsuario(ator, alvo)) {
+    throw new ErroProibido(
+      ator.id === alvo.id
+        ? "Você não pode excluir a própria conta."
+        : "Você não tem permissão para excluir este usuário.",
+    );
+  }
+
+  // Trava de segurança: apagar o último admin trancaria todo mundo para fora do
+  // sistema, sem ninguém capaz de criar outro.
+  if (alvo.papel === "admin") {
+    const linha = await consultarUm<{ total: string }>(
+      `SELECT COUNT(*) AS total FROM usuarios WHERE papel = 'admin'`,
+    );
+    if (Number(linha?.total ?? 0) <= 1) {
+      throw new ErroDeNegocio(
+        "Este é o único administrador. Crie outro antes de excluí-lo.",
+      );
+    }
+  }
+
+  await consultar(`DELETE FROM usuarios WHERE id = $1`, [alvoId]);
 }
 
 /** Grava a foto de perfil do PRÓPRIO usuário. */

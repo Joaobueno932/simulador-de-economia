@@ -20,10 +20,10 @@
 import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
 import {
   formatarData,
+  formatarDesconto,
   formatarDocumento,
   formatarKwh,
   formatarMoeda,
-  formatarPercentual,
   formatarQuantidadeUCs,
   formatarTelefone,
   somarDias,
@@ -629,7 +629,7 @@ export function Proposta({
                 letterSpacing: "-0.01em",
               }}
             >
-              DESCONTO {formatarPercentual(r.descontoMedio, 1)}
+              DESCONTO {formatarDesconto(r.descontoMedio)}
             </div>
             <div style={{ fontSize: "6pt", fontWeight: 700, color: AZUL, marginTop: "0.6mm" }}>
               sobre a tarifa do consumo compensável

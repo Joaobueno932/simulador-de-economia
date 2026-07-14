@@ -85,7 +85,14 @@ export const unidadeConsumidoraSchema = z
     desconto: z
       .number({ invalid_type_error: "Informe o desconto." })
       .min(0, "O desconto não pode ser negativo.")
-      .lt(1, "O desconto deve ser menor que 100%."),
+      .lt(1, "O desconto deve ser menor que 100%.")
+      // O desconto é um número INTEIRO de porcentos: 20%, não 20,5%.
+      // A fração 0,205 não é permitida — e a checagem é feita com tolerância
+      // porque 0,2 * 100 em ponto flutuante não dá exatamente 20.
+      .refine(
+        (d) => Math.abs(d * 100 - Math.round(d * 100)) < 1e-9,
+        "O desconto deve ser um número inteiro de porcento (ex.: 20%).",
+      ),
     cosipOverride: naoNegativo("a COSIP").nullable(),
     custoKwhConcorrente: naoNegativo("o custo do concorrente").nullable(),
   })
@@ -146,12 +153,29 @@ export const dadosClienteSchema = z.object({
     .default(CONFIG.validadePropostaDias),
 });
 
+/** Máximo de unidades consumidoras por simulação nova. */
+export const MAX_UNIDADES = 3;
+
+/** Schema de uma simulação NOVA, vinda do formulário. */
 export const simulacaoSchema = z.object({
   cliente: dadosClienteSchema,
   unidades: z
     .array(unidadeConsumidoraSchema)
     .min(1, "Adicione ao menos uma unidade consumidora.")
-    .max(10, "O simulador comporta até 10 unidades consumidoras."),
+    .max(MAX_UNIDADES, `O simulador comporta até ${MAX_UNIDADES} unidades consumidoras.`),
+});
+
+/**
+ * Schema de uma simulação JÁ GRAVADA, relida do banco para regerar o PDF.
+ *
+ * Igual ao de entrada, mas SEM o teto de unidades: uma proposta emitida quando o
+ * limite era outro continua sendo uma proposta válida, e o gestor tem que
+ * conseguir reabrir o PDF dela. Baixar o limite de hoje não pode invalidar o
+ * passado.
+ */
+export const simulacaoArmazenadaSchema = z.object({
+  cliente: dadosClienteSchema,
+  unidades: z.array(unidadeConsumidoraSchema).min(1),
 });
 
 export type SimulacaoInput = z.infer<typeof simulacaoSchema>;

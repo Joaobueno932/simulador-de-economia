@@ -17,7 +17,7 @@ import { ErroProibido } from "./auth";
 import { ErroDeNegocio } from "./usuarios";
 import { podeVerHistoricoDeTodos, podeVerProposta, type Usuario } from "@/domain/auth/types";
 import { validarConfiguracao } from "@/domain/simulator/configSchema";
-import { simulacaoSchema } from "@/domain/simulator/validation";
+import { simulacaoArmazenadaSchema } from "@/domain/simulator/validation";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import type { ResultadoSimulacao, Simulacao } from "@/domain/simulator/types";
 
@@ -312,7 +312,8 @@ export async function montarDashboard(filtro: FiltroPropostas): Promise<ResumoDa
 /** Dados necessários para regerar o PDF de uma proposta antiga. */
 export interface PropostaCompleta {
   readonly id: number;
-  readonly usuarioId: number;
+  /** Nulo quando a conta de quem emitiu foi excluída. */
+  readonly usuarioId: number | null;
   readonly vendedorId: number | null;
   readonly simulacao: Simulacao;
   readonly configuracao: ConfiguracaoSimulador;
@@ -336,7 +337,7 @@ export async function buscarPropostaParaPdf(
 
   if (!linha) throw new ErroDeNegocio("Proposta não encontrada.");
 
-  const usuarioId = Number(linha.usuario_id);
+  const usuarioId = linha.usuario_id === null ? null : Number(linha.usuario_id);
   const vendedorId = linha.vendedor_id === null ? null : Number(linha.vendedor_id);
 
   if (!podeVerProposta(ator, { usuarioId, vendedorId })) {
@@ -344,11 +345,12 @@ export async function buscarPropostaParaPdf(
   }
 
   // Revalidamos o que veio do banco: a linha é antiga, o código é novo.
+  // Sem o teto de unidades — ver `simulacaoArmazenadaSchema`.
   return {
     id: Number(linha.id),
     usuarioId,
     vendedorId,
-    simulacao: simulacaoSchema.parse(linha.simulacao) as Simulacao,
+    simulacao: simulacaoArmazenadaSchema.parse(linha.simulacao) as Simulacao,
     configuracao: validarConfiguracao(linha.configuracao),
   };
 }

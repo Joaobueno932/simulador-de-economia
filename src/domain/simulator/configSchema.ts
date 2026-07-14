@@ -97,7 +97,12 @@ export const configuracaoSchema = z.object({
     anos: z.number().int().min(1, "A projeção precisa de ao menos 1 ano.").max(30),
   }),
 
-  descontoPadrao: fracao("O desconto padrão"),
+  // Inteiro, como todo desconto. Salvar 20,5% aqui faria TODA simulação nova
+  // nascer com um desconto que a validação da UC recusa.
+  descontoPadrao: fracao("O desconto padrão").refine(
+    (d) => Math.abs(d * 100 - Math.round(d * 100)) < 1e-9,
+    "O desconto padrão deve ser um número inteiro de porcento (ex.: 20%).",
+  ),
   validadePropostaDias: z
     .number()
     .int("A validade deve ser um número inteiro de dias.")

@@ -15,6 +15,7 @@ import { Card, Mascote, SectionTitle } from "./ui";
 import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
 import {
   formatarDecimal,
+  formatarDesconto,
   formatarKwh,
   formatarMoeda,
   formatarPercentual,
@@ -277,7 +278,7 @@ export function EtapaResultado({
           </p>
           <p className="mt-1 text-sm text-white/80">
             por ano — {formatarMoeda(r.economiaMensal)} por mês, com{" "}
-            {formatarPercentual(r.descontoMedio, 1)} de desconto sobre a tarifa compensável.
+            {formatarDesconto(r.descontoMedio)} de desconto sobre a tarifa compensável.
           </p>
         </div>
         <Mascote
@@ -302,7 +303,7 @@ export function EtapaResultado({
         />
         <CardDestaque
           rotulo="Desconto"
-          valor={formatarPercentual(r.descontoMedio, 1)}
+          valor={formatarDesconto(r.descontoMedio)}
           icone={<Leaf aria-hidden="true" className="size-4" />}
           tom="amarelo"
           nota="Sobre a tarifa do consumo compensável"

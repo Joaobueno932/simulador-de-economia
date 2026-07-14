@@ -123,7 +123,9 @@ export function podeEscolherConsultor(papel: Papel): boolean {
  */
 export function podeVerProposta(
   ator: Usuario,
-  proposta: { usuarioId: number; vendedorId: number | null },
+  // `usuarioId` pode ser nulo: a conta de quem emitiu foi excluída, mas a
+  // proposta permanece no histórico.
+  proposta: { usuarioId: number | null; vendedorId: number | null },
 ): boolean {
   if (podeAdministrar(ator.papel)) return true;
   return proposta.usuarioId === ator.id || proposta.vendedorId === ator.id;

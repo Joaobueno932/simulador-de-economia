@@ -14,6 +14,7 @@ export type TipoEvento =
   | "usuario_criado"
   | "usuario_ativado"
   | "usuario_desativado"
+  | "usuario_excluido"
   | "config_alterada"
   | "senha_desconto_emitida"
   | "senha_desconto_usada"
@@ -27,6 +28,7 @@ export const ROTULO_EVENTO: Readonly<Record<TipoEvento, string>> = {
   usuario_criado: "Criou um usuário",
   usuario_ativado: "Reativou um usuário",
   usuario_desativado: "Desativou um usuário",
+  usuario_excluido: "Excluiu um usuário",
   config_alterada: "Alterou as configurações",
   senha_desconto_emitida: "Emitiu senha de desconto",
   senha_desconto_usada: "Usou senha de desconto",
@@ -43,6 +45,7 @@ export const TIPOS_EVENTO: readonly TipoEvento[] = [
   "usuario_criado",
   "usuario_desativado",
   "usuario_ativado",
+  "usuario_excluido",
   "senha_resetada",
   "senha_alterada",
   "config_alterada",

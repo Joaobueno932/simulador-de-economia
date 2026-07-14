@@ -84,6 +84,13 @@ interface CampoProps extends Omit<InputHTMLAttributes<HTMLInputElement>, "id"> {
   sufixo?: string;
   /** Ícone ao lado do rótulo — ex.: cadeado em campo travado. */
   icone?: ReactNode;
+  /**
+   * Ação ao lado do rótulo — ex.: a lupa "onde encontro isso na fatura?".
+   *
+   * Fica FORA do `<label>` de propósito: um botão dentro do label também
+   * dispararia o foco do input ao ser clicado.
+   */
+  acao?: ReactNode;
 }
 
 export function Campo({
@@ -92,6 +99,7 @@ export function Campo({
   ajuda,
   sufixo,
   icone,
+  acao,
   className = "",
   ...props
 }: CampoProps) {
@@ -103,13 +111,13 @@ export function Campo({
 
   return (
     <div className={className}>
-      <label
-        htmlFor={id}
-        className="mb-1.5 flex items-center gap-1.5 text-sm font-semibold text-marca-texto"
-      >
-        {label}
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <label htmlFor={id} className="text-sm font-semibold text-marca-texto">
+          {label}
+        </label>
         {icone ? <span className="text-marca-texto-suave">{icone}</span> : null}
-      </label>
+        {acao}
+      </div>
 
       <div className="relative">
         <input
@@ -148,9 +156,19 @@ interface SelectProps extends Omit<SelectHTMLAttributes<HTMLSelectElement>, "id"
   erro?: string;
   ajuda?: string;
   opcoes: readonly { readonly value: string; readonly label: string }[];
+  /** Ação ao lado do rótulo — ver `CampoProps.acao`. */
+  acao?: ReactNode;
 }
 
-export function Select({ label, erro, ajuda, opcoes, className = "", ...props }: SelectProps) {
+export function Select({
+  label,
+  erro,
+  ajuda,
+  opcoes,
+  acao,
+  className = "",
+  ...props
+}: SelectProps) {
   const id = useId();
   const erroId = `${id}-erro`;
   const ajudaId = `${id}-ajuda`;
@@ -158,9 +176,12 @@ export function Select({ label, erro, ajuda, opcoes, className = "", ...props }:
 
   return (
     <div className={className}>
-      <label htmlFor={id} className="mb-1.5 block text-sm font-semibold text-marca-texto">
-        {label}
-      </label>
+      <div className="mb-1.5 flex items-center gap-1.5">
+        <label htmlFor={id} className="text-sm font-semibold text-marca-texto">
+          {label}
+        </label>
+        {acao}
+      </div>
       <select
         id={id}
         aria-invalid={erro ? true : undefined}

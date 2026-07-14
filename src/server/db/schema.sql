@@ -122,7 +122,12 @@ CREATE INDEX IF NOT EXISTS senhas_vendedor_ativas
 CREATE TABLE IF NOT EXISTS propostas (
   id                 BIGSERIAL PRIMARY KEY,
   -- Quem estava logado (pode ser um gestor emitindo em nome de um vendedor).
-  usuario_id         BIGINT      NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  --
+  -- SET NULL, não CASCADE: excluir um usuário NÃO pode apagar as propostas que
+  -- ele emitiu. O histórico do gestor é justamente o registro do que foi feito —
+  -- e o nome do consultor fica gravado em texto na própria linha, então a
+  -- proposta continua legível mesmo sem a conta.
+  usuario_id         BIGINT      REFERENCES usuarios (id) ON DELETE SET NULL,
   -- O vendedor que aparece na proposta. Base das métricas.
   vendedor_id        BIGINT      REFERENCES usuarios (id) ON DELETE SET NULL,
   consultor          TEXT        NOT NULL,
@@ -144,6 +149,33 @@ CREATE TABLE IF NOT EXISTS propostas (
 
   criada_em          TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+
+-- Bancos criados antes desta mudança tinham `usuario_id NOT NULL ... ON DELETE
+-- CASCADE`: excluir um vendedor levaria junto TODAS as propostas dele. Trocamos
+-- para SET NULL, preservando o histórico.
+ALTER TABLE propostas ALTER COLUMN usuario_id DROP NOT NULL;
+
+DO $$
+DECLARE
+  nome_constraint TEXT;
+BEGIN
+  SELECT conname INTO nome_constraint
+    FROM pg_constraint
+   WHERE conrelid = 'propostas'::regclass
+     AND contype = 'f'
+     AND conkey = ARRAY[
+       (SELECT attnum FROM pg_attribute
+         WHERE attrelid = 'propostas'::regclass AND attname = 'usuario_id')
+     ]::smallint[];
+
+  IF nome_constraint IS NOT NULL THEN
+    EXECUTE format('ALTER TABLE propostas DROP CONSTRAINT %I', nome_constraint);
+  END IF;
+
+  ALTER TABLE propostas
+    ADD CONSTRAINT propostas_usuario_id_fkey
+    FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL;
+END $$;
 
 CREATE INDEX IF NOT EXISTS propostas_vendedor ON propostas (vendedor_id, criada_em DESC);
 CREATE INDEX IF NOT EXISTS propostas_data ON propostas (criada_em DESC);

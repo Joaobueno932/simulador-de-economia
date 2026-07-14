@@ -15,10 +15,10 @@ import { Avatar } from "../Avatar";
 import { Card, SectionTitle } from "../ui";
 import { BarraFiltros, FILTROS_VAZIOS, paraQuery, type EstadoFiltros } from "./Filtros";
 import {
+  formatarDesconto,
   formatarDocumento,
   formatarKwh,
   formatarMoeda,
-  formatarPercentual,
   formatarTelefone,
 } from "@/domain/simulator/format";
 import type { PropostaListada } from "@/server/propostas";
@@ -168,7 +168,7 @@ export function AbaClientes({ vendedores }: { vendedores: readonly UsuarioListad
                       {formatarMoeda(p.economiaAnual)}
                     </td>
                     <td className="px-2 py-2.5 tabular-nums">
-                      {formatarPercentual(p.descontoMedio, 1)}
+                      {formatarDesconto(p.descontoMedio)}
                     </td>
                     <td className="whitespace-nowrap px-2 py-2.5 text-marca-texto-suave">
                       {quando(p.criadaEm)}

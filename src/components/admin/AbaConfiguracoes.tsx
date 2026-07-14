@@ -466,11 +466,12 @@ export function AbaConfiguracoes({
               type="number"
               min={0}
               max={99}
-              step="any"
-              value={paraPct(c.descontoPadrao)}
+              // Inteiro: o desconto é 20%, não 20,5%. O schema recusa fração.
+              step={1}
+              value={String(Math.round(c.descontoPadrao * 100))}
               onChange={(e) =>
                 set((d) => {
-                  d.descontoPadrao = num(e.target.value) / 100;
+                  d.descontoPadrao = Math.round(num(e.target.value)) / 100;
                 })
               }
               sufixo="%"

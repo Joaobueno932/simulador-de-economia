@@ -16,7 +16,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Avatar } from "../Avatar";
 import { Card, SectionTitle } from "../ui";
 import { BarraFiltros, FILTROS_VAZIOS, paraQuery, type EstadoFiltros } from "./Filtros";
-import { formatarMoeda, formatarPercentual } from "@/domain/simulator/format";
+import { formatarDesconto, formatarMoeda } from "@/domain/simulator/format";
 import type { ResumoDashboard } from "@/server/propostas";
 import type { UsuarioListado } from "@/server/usuarios";
 
@@ -220,7 +220,7 @@ export function AbaDashboard({ vendedores }: { vendedores: readonly UsuarioLista
                           {v.propostas > 0 ? formatarMoeda(v.economiaAnualMedia) : "—"}
                         </td>
                         <td className="px-2 py-2.5 tabular-nums">
-                          {v.propostas > 0 ? formatarPercentual(v.descontoMedio, 1) : "—"}
+                          {v.propostas > 0 ? formatarDesconto(v.descontoMedio) : "—"}
                         </td>
                         <td className="whitespace-nowrap px-2 py-2.5 text-marca-texto-suave">
                           {quando(v.ultimaProposta)}

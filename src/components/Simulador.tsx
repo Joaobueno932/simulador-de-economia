@@ -30,7 +30,7 @@ import { ModalSenhaDesconto } from "@/components/ModalSenhaDesconto";
 import { Botao, Mascote } from "@/components/ui";
 import { useSimulacao } from "@/components/useSimulacao";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
-import { formatarKwh, formatarMoeda, formatarPercentual } from "@/domain/simulator/format";
+import { formatarDesconto, formatarKwh, formatarMoeda } from "@/domain/simulator/format";
 import { dadosClienteSchema, simulacaoSchema } from "@/domain/simulator/validation";
 import {
   podeAdministrar,
@@ -174,7 +174,7 @@ export function Simulador({
       },
       {
         rotulo: "Desconto",
-        valor: semConsumo ? traco : formatarPercentual(resultado.descontoMedio, 1),
+        valor: semConsumo ? traco : formatarDesconto(resultado.descontoMedio),
       },
     ];
   }, [resultado, semConsumo]);
