@@ -23,6 +23,9 @@ export default async function Page() {
 
   const { usuario, descontoLiberado } = sessao;
 
+  // Quem está com a senha padrão não usa o sistema antes de trocá-la.
+  if (usuario.senhaProvisoria) redirect("/trocar-senha");
+
   // Vendedor não escolhe consultor — não precisa da lista.
   const [config, vendedores] = await Promise.all([
     carregarConfiguracao(),
@@ -36,7 +39,7 @@ export default async function Page() {
       vendedores={vendedores.map((v) => ({
         id: v.id,
         nome: v.nome,
-        instituicao: v.instituicao,
+        instituicoes: v.instituicoes,
       }))}
       descontoJaLiberado={descontoLiberado}
     />

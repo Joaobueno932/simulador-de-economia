@@ -9,18 +9,30 @@
 /** admin > gestor > vendedor. */
 export type Papel = "admin" | "gestor" | "vendedor";
 
-/** Instituições às quais um vendedor pode estar vinculado. */
+/**
+ * Instituições às quais um vendedor pode estar vinculado.
+ *
+ * Servem SOMENTE para métricas: não alteram cálculo, permissão nem proposta.
+ * Um vendedor pode pertencer a mais de uma.
+ */
 export const INSTITUICOES = ["SEMAPA", "FIEMS", "ADILSON"] as const;
 export type Instituicao = (typeof INSTITUICOES)[number];
+
+/** Senha entregue a um usuário novo (ou em um reset). Trocada no 1º acesso. */
+export const SENHA_PADRAO = "senha123";
 
 export interface Usuario {
   readonly id: number;
   readonly nome: string;
   readonly email: string;
   readonly papel: Papel;
-  /** Só vendedor tem instituição. */
-  readonly instituicao: Instituicao | null;
+  /** Só vendedor tem instituições. Pode ter mais de uma, ou nenhuma. */
+  readonly instituicoes: readonly Instituicao[];
   readonly ativo: boolean;
+  /** Está com a senha padrão e precisa trocá-la antes de usar o sistema. */
+  readonly senhaProvisoria: boolean;
+  /** Tem foto de perfil enviada. */
+  readonly temFoto: boolean;
 }
 
 export const ROTULO_PAPEL: Readonly<Record<Papel, string>> = {
@@ -41,6 +53,16 @@ export function podeEditarConfiguracoes(papel: Papel): boolean {
 
 /** Emitir senha de uso único para liberar o desconto de um vendedor. */
 export function podeEmitirSenhaDesconto(papel: Papel): boolean {
+  return podeAdministrar(papel);
+}
+
+/** Ver o dashboard e o histórico de TODOS os vendedores. */
+export function podeVerHistoricoDeTodos(papel: Papel): boolean {
+  return podeAdministrar(papel);
+}
+
+/** Redefinir a senha de outro usuário para a senha padrão. */
+export function podeResetarSenha(papel: Papel): boolean {
   return podeAdministrar(papel);
 }
 
@@ -66,7 +88,7 @@ export function podeCriarPapel(criador: Papel, alvo: Papel): boolean {
 }
 
 /**
- * Quem pode editar/desativar um usuário já existente.
+ * Quem pode editar/desativar/resetar um usuário já existente.
  *
  * Regras:
  * - ninguém mexe em si mesmo por esta tela (evita se desativar ou se rebaixar);
@@ -91,4 +113,18 @@ export function podeEditarDescontoLivremente(papel: Papel): boolean {
 /** Vendedor só emite proposta em nome de si mesmo. */
 export function podeEscolherConsultor(papel: Papel): boolean {
   return podeAdministrar(papel);
+}
+
+/**
+ * Quem pode abrir o PDF de uma proposta já emitida.
+ *
+ * Admin/gestor veem tudo. Vendedor vê só o que saiu no nome dele — inclusive as
+ * que um gestor emitiu em seu nome.
+ */
+export function podeVerProposta(
+  ator: Usuario,
+  proposta: { usuarioId: number; vendedorId: number | null },
+): boolean {
+  if (podeAdministrar(ator.papel)) return true;
+  return proposta.usuarioId === ator.id || proposta.vendedorId === ator.id;
 }

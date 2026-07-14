@@ -37,20 +37,39 @@ interface LinhaUsuario {
   id: number;
   nome: string;
   email: string;
-  senha_hash: string;
   papel: Papel;
-  instituicao: Instituicao | null;
   ativo: boolean;
+  senha_provisoria: boolean;
+  tem_foto: boolean;
+  instituicoes: Instituicao[] | null;
 }
 
-function paraUsuario(l: Omit<LinhaUsuario, "senha_hash">): Usuario {
+/**
+ * Campos do usuário + instituições agregadas.
+ *
+ * As instituições viraram N:N, então toda leitura de usuário passa por este
+ * `SELECT` — assim nenhum lugar do código esquece de trazê-las.
+ */
+export const SELECT_USUARIO = `
+  u.id, u.nome, u.email, u.papel, u.ativo, u.senha_provisoria,
+  (u.foto IS NOT NULL) AS tem_foto,
+  COALESCE(
+    (SELECT ARRAY_AGG(i.instituicao ORDER BY i.instituicao)
+       FROM usuario_instituicoes i WHERE i.usuario_id = u.id),
+    ARRAY[]::TEXT[]
+  ) AS instituicoes
+`;
+
+export function paraUsuario(l: LinhaUsuario): Usuario {
   return {
     id: Number(l.id),
     nome: l.nome,
     email: l.email,
     papel: l.papel,
-    instituicao: l.instituicao,
+    instituicoes: l.instituicoes ?? [],
     ativo: l.ativo,
+    senhaProvisoria: l.senha_provisoria,
+    temFoto: l.tem_foto,
   };
 }
 
@@ -70,10 +89,10 @@ function hashDeToken(token: string): string {
  * inexistente — sem distinguir os casos para quem está de fora.
  */
 export async function autenticar(email: string, senha: string): Promise<Usuario | null> {
-  const linha = await consultarUm<LinhaUsuario>(
-    `SELECT id, nome, email, senha_hash, papel, instituicao, ativo
-       FROM usuarios
-      WHERE LOWER(email) = LOWER($1)`,
+  const linha = await consultarUm<LinhaUsuario & { senha_hash: string }>(
+    `SELECT ${SELECT_USUARIO}, u.senha_hash
+       FROM usuarios u
+      WHERE LOWER(u.email) = LOWER($1)`,
     [email.trim()],
   );
 
@@ -133,11 +152,8 @@ export async function sessaoAtual(): Promise<Sessao | null> {
   const token = jar.get(COOKIE_SESSAO)?.value;
   if (!token) return null;
 
-  const linha = await consultarUm<
-    Omit<LinhaUsuario, "senha_hash"> & { desconto_liberado: boolean }
-  >(
-    `SELECT u.id, u.nome, u.email, u.papel, u.instituicao, u.ativo,
-            s.desconto_liberado
+  const linha = await consultarUm<LinhaUsuario & { desconto_liberado: boolean }>(
+    `SELECT ${SELECT_USUARIO}, s.desconto_liberado
        FROM sessoes s
        JOIN usuarios u ON u.id = s.usuario_id
       WHERE s.token_hash = $1
@@ -175,6 +191,31 @@ export async function liberarDescontoNaSessao(): Promise<void> {
   ]);
 }
 
+/**
+ * Troca a senha do próprio usuário e limpa a marca de provisória.
+ *
+ * Derruba as OUTRAS sessões dele: se a senha padrão vazou, quem estiver logado
+ * com ela perde o acesso na hora. A sessão atual continua viva.
+ */
+export async function trocarPropriaSenha(usuarioId: number, novaSenha: string): Promise<void> {
+  const jar = await cookies();
+  const token = jar.get(COOKIE_SESSAO)?.value;
+
+  await consultar(
+    `UPDATE usuarios
+        SET senha_hash = $1, senha_provisoria = FALSE, atualizado_em = NOW()
+      WHERE id = $2`,
+    [await hashDeSenha(novaSenha), usuarioId],
+  );
+
+  if (token) {
+    await consultar(`DELETE FROM sessoes WHERE usuario_id = $1 AND token_hash <> $2`, [
+      usuarioId,
+      hashDeToken(token),
+    ]);
+  }
+}
+
 /** Como `usuarioAtual`, mas estoura se não houver sessão. Use nas rotas de API. */
 export async function exigirUsuario(): Promise<Usuario> {
   return (await exigirSessao()).usuario;
@@ -187,6 +228,24 @@ export async function exigirSessao(): Promise<Sessao> {
   return s;
 }
 
+/**
+ * Sessão de quem JÁ trocou a senha provisória.
+ *
+ * Usada em todas as rotas de trabalho. Quem está com a senha padrão só consegue
+ * trocá-la ou sair — não simula, não gera PDF, não administra nada.
+ */
+export async function exigirSessaoAtiva(): Promise<Sessao> {
+  const s = await exigirSessao();
+  if (s.usuario.senhaProvisoria) {
+    throw new ErroProibido("Troque a senha provisória antes de usar o sistema.");
+  }
+  return s;
+}
+
+export async function exigirUsuarioAtivo(): Promise<Usuario> {
+  return (await exigirSessaoAtiva()).usuario;
+}
+
 export class ErroNaoAutorizado extends Error {
   readonly status = 401;
 }
@@ -195,7 +254,7 @@ export class ErroProibido extends Error {
   readonly status = 403;
 }
 
-/** Comparação de códigos em tempo constante (senha de uso único). */
+/** Comparação em tempo constante. */
 export function comparaSeguro(a: string, b: string): boolean {
   const ba = Buffer.from(a);
   const bb = Buffer.from(b);

@@ -1,7 +1,8 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 
-import { exigirUsuario, liberarDescontoNaSessao } from "@/server/auth";
+import { exigirUsuarioAtivo, liberarDescontoNaSessao } from "@/server/auth";
+import { registrarEvento } from "@/server/eventos";
 import { consumirSenha } from "@/server/senhasDesconto";
 import { podeEditarDescontoLivremente } from "@/domain/auth/types";
 import { responderErro } from "@/app/api/_lib/responder";
@@ -20,7 +21,7 @@ const schema = z.object({
  */
 export async function POST(request: Request) {
   try {
-    const usuario = await exigirUsuario();
+    const usuario = await exigirUsuarioAtivo();
 
     // Admin/gestor já editam sem senha — não faz sentido queimar um código.
     if (podeEditarDescontoLivremente(usuario.papel)) {
@@ -41,6 +42,14 @@ export async function POST(request: Request) {
     // tela: é este registro que a rota do PDF confere antes de aceitar um
     // desconto diferente do padrão.
     await liberarDescontoNaSessao();
+
+    // O uso da senha entra no histórico — o gestor precisa ver quem destravou
+    // o desconto e quando.
+    await registrarEvento({
+      usuarioId: usuario.id,
+      tipo: "senha_desconto_usada",
+      descricao: "Usou a senha de liberação e destravou o desconto",
+    });
 
     return NextResponse.json({ liberado: true });
   } catch (erro) {

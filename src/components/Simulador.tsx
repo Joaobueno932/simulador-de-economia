@@ -22,6 +22,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 
+import { Avatar } from "@/components/Avatar";
 import { EtapaCliente, type VendedorOpcao } from "@/components/EtapaCliente";
 import { EtapaResultado } from "@/components/EtapaResultado";
 import { EtapaUnidades } from "@/components/EtapaUnidades";
@@ -211,14 +212,30 @@ export function Simulador({
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Quem é você — e com qual papel. */}
-            <div className="hidden text-right md:block">
-              <p className="text-sm font-bold leading-tight text-marca-texto">{usuario.nome}</p>
-              <p className="text-xs font-medium text-marca-texto-suave">
-                {ROTULO_PAPEL[usuario.papel]}
-                {usuario.instituicao ? ` · ${usuario.instituicao}` : ""}
-              </p>
-            </div>
+            {/* Quem é você — e com qual papel. Clica e vai para o perfil. */}
+            <Link
+              href="/perfil"
+              className="flex items-center gap-2.5 rounded-xl px-1.5 py-1 transition-colors hover:bg-marca-azul-suave"
+              title="Meu perfil"
+            >
+              <Avatar
+                usuarioId={usuario.id}
+                nome={usuario.nome}
+                temFoto={usuario.temFoto}
+                tamanho="md"
+              />
+              <span className="hidden text-left md:block">
+                <span className="block text-sm font-bold leading-tight text-marca-texto">
+                  {usuario.nome}
+                </span>
+                <span className="block text-xs font-medium text-marca-texto-suave">
+                  {ROTULO_PAPEL[usuario.papel]}
+                  {usuario.instituicoes.length > 0
+                    ? ` · ${usuario.instituicoes.join(", ")}`
+                    : ""}
+                </span>
+              </span>
+            </Link>
 
             {podeAdministrar(usuario.papel) ? (
               <Link

@@ -8,7 +8,8 @@
  * Economia. É isso que faz a economia aparecer como a fatia poupada.
  */
 
-import { Leaf, PiggyBank, Receipt, TrendingDown, Users, Zap } from "lucide-react";
+import { Eye, EyeOff, Leaf, PiggyBank, Receipt, TrendingDown, Users, Zap } from "lucide-react";
+import { useState } from "react";
 
 import { Card, Mascote, SectionTitle } from "./ui";
 import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
@@ -71,6 +72,61 @@ function CardDestaque({
       </div>
       <p className="text-2xl font-extrabold tabular-nums text-marca-texto">{valor}</p>
       {nota ? <p className="mt-1 text-xs text-marca-texto-suave">{nota}</p> : null}
+    </div>
+  );
+}
+
+/**
+ * Card que começa fechado e o usuário abre quando quiser.
+ *
+ * O valor só é montado quando aberto — enquanto fechado, nem o número aparece na
+ * tela (nada de esconder com CSS e deixar o dado visível para quem olha por cima
+ * do ombro do vendedor).
+ */
+function CardRecolhivel({
+  rotulo,
+  valor,
+  icone,
+  nota,
+}: {
+  rotulo: string;
+  valor: string;
+  icone: React.ReactNode;
+  nota?: string;
+}) {
+  const [aberto, setAberto] = useState(false);
+
+  return (
+    <div className="rounded-card border border-marca-borda bg-white p-4">
+      <div className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-marca-texto-suave">
+        {icone}
+        {rotulo}
+      </div>
+
+      {aberto ? (
+        <>
+          <p className="text-2xl font-extrabold tabular-nums text-marca-laranja">{valor}</p>
+          {nota ? <p className="mt-1 text-xs text-marca-texto-suave">{nota}</p> : null}
+          <button
+            type="button"
+            onClick={() => setAberto(false)}
+            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-marca-texto-suave hover:text-marca-texto"
+          >
+            <EyeOff aria-hidden="true" className="size-3.5" />
+            Ocultar
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          onClick={() => setAberto(true)}
+          aria-expanded={false}
+          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-dashed border-marca-borda px-3 py-1.5 text-sm font-bold text-marca-texto-suave transition-colors hover:border-marca-azul-claro hover:bg-marca-azul-suave hover:text-marca-azul"
+        >
+          <Eye aria-hidden="true" className="size-4" />
+          Mostrar
+        </button>
+      )}
     </div>
   );
 }
@@ -267,12 +323,14 @@ export function EtapaResultado({
           icone={<Receipt aria-hidden="true" className="size-4" />}
           tom="verde"
         />
-        <CardDestaque
+        {/* Economia efetiva vem RECOLHIDA: é a métrica menos favorável (dilui a
+            economia no total da fatura, incluindo taxa mínima e impostos). O
+            vendedor mostra quando fizer sentido na conversa. */}
+        <CardRecolhivel
           rotulo="Economia efetiva"
           valor={formatarPercentual(r.economiaPercentualEfetiva)}
           icone={<TrendingDown aria-hidden="true" className="size-4" />}
-          tom="laranja"
-          nota="Sobre o total da fatura"
+          nota="Sobre o total da fatura, incluindo taxa mínima e impostos"
         />
       </div>
 
@@ -310,7 +368,10 @@ export function EtapaResultado({
               rotulo="Valor pago à distribuidora"
               valor={formatarMoeda(r.valorPagoDistribuidora)}
             />
-            <Metrica rotulo="Valor pago ao locador" valor={formatarMoeda(r.valorPagoLocador)} />
+            <Metrica
+              rotulo="Valor pago ao Em Conta"
+              valor={formatarMoeda(r.valorPagoLocador)}
+            />
             <Metrica
               rotulo="Participação na associação"
               valor={`${formatarDecimal(r.equivalenteKwp)} kWp`}

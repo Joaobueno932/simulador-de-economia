@@ -10,6 +10,10 @@ import {
   podeEmitirSenhaDesconto,
   podeEscolherConsultor,
   podeGerenciarUsuario,
+  podeResetarSenha,
+  podeVerHistoricoDeTodos,
+  podeVerProposta,
+  SENHA_PADRAO,
   type Papel,
   type Usuario,
 } from "./types";
@@ -20,8 +24,10 @@ function usuario(papel: Papel, id = 1, over: Partial<Usuario> = {}): Usuario {
     nome: `Usuário ${id}`,
     email: `u${id}@emconta.com.br`,
     papel,
-    instituicao: papel === "vendedor" ? "SEMAPA" : null,
+    instituicoes: papel === "vendedor" ? ["SEMAPA"] : [],
     ativo: true,
+    senhaProvisoria: false,
+    temFoto: false,
     ...over,
   };
 }
@@ -113,5 +119,64 @@ describe("consultor da proposta", () => {
     expect(podeEscolherConsultor("admin")).toBe(true);
     expect(podeEscolherConsultor("gestor")).toBe(true);
     expect(podeEscolherConsultor("vendedor")).toBe(false);
+  });
+});
+
+describe("dashboard e histórico", () => {
+  it("só admin e gestor veem a trilha de todos", () => {
+    expect(podeVerHistoricoDeTodos("admin")).toBe(true);
+    expect(podeVerHistoricoDeTodos("gestor")).toBe(true);
+    expect(podeVerHistoricoDeTodos("vendedor")).toBe(false);
+  });
+
+  it("só admin e gestor redefinem senha", () => {
+    expect(podeResetarSenha("admin")).toBe(true);
+    expect(podeResetarSenha("gestor")).toBe(true);
+    expect(podeResetarSenha("vendedor")).toBe(false);
+  });
+});
+
+describe("acesso a uma proposta emitida", () => {
+  const admin = usuario("admin", 1);
+  const gestor = usuario("gestor", 2);
+  const vendedor = usuario("vendedor", 4);
+  const outroVendedor = usuario("vendedor", 5);
+
+  it("admin e gestor veem qualquer proposta", () => {
+    const alheia = { usuarioId: 99, vendedorId: 98 };
+    expect(podeVerProposta(admin, alheia)).toBe(true);
+    expect(podeVerProposta(gestor, alheia)).toBe(true);
+  });
+
+  it("vendedor vê a proposta que ele mesmo gerou", () => {
+    expect(podeVerProposta(vendedor, { usuarioId: 4, vendedorId: 4 })).toBe(true);
+  });
+
+  it("vendedor vê a proposta que o gestor emitiu EM NOME DELE", () => {
+    // O gestor (id 2) gerou, mas a proposta saiu no nome do vendedor (id 4).
+    expect(podeVerProposta(vendedor, { usuarioId: 2, vendedorId: 4 })).toBe(true);
+  });
+
+  it("vendedor NÃO vê a proposta de outro vendedor", () => {
+    expect(podeVerProposta(outroVendedor, { usuarioId: 4, vendedorId: 4 })).toBe(false);
+  });
+});
+
+describe("senha padrão", () => {
+  it("é 'senha123' e tem o mínimo de 8 caracteres exigido no cadastro", () => {
+    expect(SENHA_PADRAO).toBe("senha123");
+    expect(SENHA_PADRAO.length).toBeGreaterThanOrEqual(8);
+  });
+});
+
+describe("instituições", () => {
+  it("um vendedor pode ter mais de uma", () => {
+    const v = usuario("vendedor", 7, { instituicoes: ["SEMAPA", "FIEMS"] });
+    expect(v.instituicoes).toHaveLength(2);
+  });
+
+  it("admin e gestor não têm instituição", () => {
+    expect(usuario("admin").instituicoes).toEqual([]);
+    expect(usuario("gestor").instituicoes).toEqual([]);
   });
 });

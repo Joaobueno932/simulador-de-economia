@@ -33,7 +33,7 @@ type Campos = keyof DadosCliente;
 export interface VendedorOpcao {
   readonly id: number;
   readonly nome: string;
-  readonly instituicao: string | null;
+  readonly instituicoes: readonly string[];
 }
 
 export function EtapaCliente({
@@ -134,7 +134,10 @@ export function EtapaCliente({
               { value: "", label: "Selecione o vendedor…" },
               ...vendedores.map((v) => ({
                 value: v.nome,
-                label: v.instituicao ? `${v.nome} — ${v.instituicao}` : v.nome,
+                label:
+                  v.instituicoes.length > 0
+                    ? `${v.nome} — ${v.instituicoes.join(", ")}`
+                    : v.nome,
               })),
             ]}
             ajuda={

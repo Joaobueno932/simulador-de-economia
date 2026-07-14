@@ -7,24 +7,63 @@
  * que o papel permite, mas quem decide de fato é o servidor.
  */
 
-import { Loader2, Plus, UserPlus, X } from "lucide-react";
+import { KeyRound, Loader2, Plus, UserPlus, X } from "lucide-react";
 import { useState } from "react";
 
+import { Avatar } from "../Avatar";
 import { Botao, Campo, Card, SectionTitle, Select } from "../ui";
 import {
   INSTITUICOES,
   papeisQuePodeCriar,
   podeGerenciarUsuario,
   ROTULO_PAPEL,
+  SENHA_PADRAO,
   type Instituicao,
   type Papel,
   type Usuario,
 } from "@/domain/auth/types";
 import type { UsuarioListado } from "@/server/usuarios";
 
-interface Erro {
-  campo?: string;
-  mensagem: string;
+/** Caixas de seleção das instituições — um vendedor pode ter várias. */
+function EscolherInstituicoes({
+  valor,
+  onChange,
+  desabilitado = false,
+}: {
+  valor: readonly Instituicao[];
+  onChange: (v: Instituicao[]) => void;
+  desabilitado?: boolean;
+}) {
+  return (
+    <div className="flex flex-wrap gap-2">
+      {INSTITUICOES.map((i) => {
+        const marcada = valor.includes(i);
+        return (
+          <label
+            key={i}
+            className={`inline-flex cursor-pointer items-center gap-2 rounded-xl border-2 px-3 py-2 text-sm font-bold transition-colors ${
+              marcada
+                ? "border-marca-azul bg-marca-azul-suave text-marca-azul"
+                : "border-marca-borda bg-white text-marca-texto-suave hover:border-marca-azul-claro"
+            } ${desabilitado ? "cursor-not-allowed opacity-50" : ""}`}
+          >
+            <input
+              type="checkbox"
+              checked={marcada}
+              disabled={desabilitado}
+              onChange={(e) =>
+                onChange(
+                  e.target.checked ? [...valor, i] : valor.filter((x) => x !== i),
+                )
+              }
+              className="size-4 accent-[#0F579F]"
+            />
+            {i}
+          </label>
+        );
+      })}
+    </div>
+  );
 }
 
 function FormNovoUsuario({
@@ -40,10 +79,11 @@ function FormNovoUsuario({
 
   const [nome, setNome] = useState("");
   const [email, setEmail] = useState("");
-  const [senha, setSenha] = useState("");
   const [papel, setPapel] = useState<Papel>(papeis[papeis.length - 1] ?? "vendedor");
-  const [instituicao, setInstituicao] = useState<Instituicao>("SEMAPA");
-  const [erro, setErro] = useState<Erro | null>(null);
+  const [instituicoes, setInstituicoes] = useState<Instituicao[]>(["SEMAPA"]);
+  const [usarSenhaPadrao, setUsarSenhaPadrao] = useState(true);
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState<string | null>(null);
   const [enviando, setEnviando] = useState(false);
 
   async function criar(e: React.FormEvent) {
@@ -58,26 +98,27 @@ function FormNovoUsuario({
         body: JSON.stringify({
           nome,
           email,
-          senha,
           papel,
-          instituicao: papel === "vendedor" ? instituicao : null,
+          instituicoes: papel === "vendedor" ? instituicoes : [],
+          usarSenhaPadrao,
+          senha: usarSenhaPadrao ? null : senha,
         }),
       });
 
       const dados = (await resposta.json().catch(() => null)) as
-        | { usuario?: UsuarioListado; erro?: string; problemas?: Erro[] }
+        | { usuario?: UsuarioListado; erro?: string; problemas?: { mensagem: string }[] }
         | null;
 
       if (!resposta.ok || !dados?.usuario) {
         const p = dados?.problemas?.[0];
-        setErro({ mensagem: p?.mensagem ?? dados?.erro ?? "Não foi possível criar o usuário." });
+        setErro(p?.mensagem ?? dados?.erro ?? "Não foi possível criar o usuário.");
         return;
       }
 
       onCriado(dados.usuario);
       onFechar();
     } catch {
-      setErro({ mensagem: "Não foi possível conectar." });
+      setErro("Não foi possível conectar.");
     } finally {
       setEnviando(false);
     }
@@ -122,15 +163,6 @@ function FormNovoUsuario({
           required
           autoComplete="off"
         />
-        <Campo
-          label="Senha provisória"
-          type="password"
-          value={senha}
-          onChange={(e) => setSenha(e.target.value)}
-          required
-          autoComplete="new-password"
-          ajuda="Mínimo de 8 caracteres."
-        />
 
         <Select
           label="Papel"
@@ -141,12 +173,47 @@ function FormNovoUsuario({
         />
 
         {papel === "vendedor" ? (
-          <Select
-            label="Instituição"
-            value={instituicao}
-            onChange={(e) => setInstituicao(e.target.value as Instituicao)}
-            opcoes={INSTITUICOES.map((i) => ({ value: i, label: i }))}
-            ajuda="A qual instituição este vendedor pertence."
+          <div className="sm:col-span-2">
+            <span className="mb-1.5 block text-sm font-semibold text-marca-texto">
+              Instituições
+            </span>
+            <EscolherInstituicoes valor={instituicoes} onChange={setInstituicoes} />
+            <p className="mt-1.5 text-xs text-marca-texto-suave">
+              Servem só para métricas. O vendedor pode pertencer a mais de uma.
+            </p>
+          </div>
+        ) : null}
+
+        {/* Senha padrão + troca no primeiro acesso. */}
+        <div className="sm:col-span-2">
+          <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border-2 border-marca-borda p-3">
+            <input
+              type="checkbox"
+              checked={usarSenhaPadrao}
+              onChange={(e) => setUsarSenhaPadrao(e.target.checked)}
+              className="mt-0.5 size-4 accent-[#0F579F]"
+            />
+            <span>
+              <span className="block text-sm font-semibold text-marca-texto">
+                Usar a senha padrão ({SENHA_PADRAO})
+              </span>
+              <span className="block text-xs text-marca-texto-suave">
+                O usuário entra com ela e é obrigado a escolher uma nova no primeiro acesso.
+              </span>
+            </span>
+          </label>
+        </div>
+
+        {!usarSenhaPadrao ? (
+          <Campo
+            label="Senha"
+            type="password"
+            value={senha}
+            onChange={(e) => setSenha(e.target.value)}
+            required
+            autoComplete="new-password"
+            ajuda="Mínimo de 8 caracteres."
+            className="sm:col-span-2"
           />
         ) : null}
 
@@ -155,7 +222,7 @@ function FormNovoUsuario({
             role="alert"
             className="rounded-xl border-2 border-red-200 bg-red-50 px-3 py-2 text-sm font-medium text-red-700 sm:col-span-2"
           >
-            {erro.mensagem}
+            {erro}
           </p>
         ) : null}
 
@@ -185,6 +252,7 @@ export function AbaUsuarios({
   const [criando, setCriando] = useState(false);
   const [ocupado, setOcupado] = useState<number | null>(null);
   const [erro, setErro] = useState<string | null>(null);
+  const [aviso, setAviso] = useState<string | null>(null);
 
   async function alterar(alvo: UsuarioListado, patch: Record<string, unknown>) {
     setOcupado(alvo.id);
@@ -207,6 +275,37 @@ export function AbaUsuarios({
 
       const atualizado = dados.usuario;
       onMudou(usuarios.map((u) => (u.id === atualizado.id ? atualizado : u)));
+    } catch {
+      setErro("Não foi possível conectar.");
+    } finally {
+      setOcupado(null);
+    }
+  }
+
+  async function resetar(alvo: UsuarioListado) {
+    setOcupado(alvo.id);
+    setErro(null);
+    setAviso(null);
+    try {
+      const resposta = await fetch(`/api/usuarios/${alvo.id}/resetar-senha`, {
+        method: "POST",
+      });
+
+      const dados = (await resposta.json().catch(() => null)) as
+        | { usuario?: UsuarioListado; senhaPadrao?: string; erro?: string }
+        | null;
+
+      if (!resposta.ok || !dados?.usuario) {
+        setErro(dados?.erro ?? "Não foi possível redefinir a senha.");
+        return;
+      }
+
+      const atualizado = dados.usuario;
+      onMudou(usuarios.map((u) => (u.id === atualizado.id ? atualizado : u)));
+      setAviso(
+        `Senha de ${atualizado.nome} redefinida para "${dados.senhaPadrao}". ` +
+          "Ele vai trocá-la no próximo acesso.",
+      );
     } catch {
       setErro("Não foi possível conectar.");
     } finally {
@@ -238,16 +337,25 @@ export function AbaUsuarios({
         </p>
       ) : null}
 
+      {aviso ? (
+        <p
+          role="status"
+          className="rounded-xl border-2 border-marca-amarelo/50 bg-marca-amarelo-suave px-4 py-3 text-sm font-medium text-marca-texto"
+        >
+          {aviso}
+        </p>
+      ) : null}
+
       <Card>
         <SectionTitle descricao={`${usuarios.length} usuário(s) cadastrado(s).`}>
           Usuários
         </SectionTitle>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[44rem] border-collapse text-sm">
+          <table className="w-full min-w-[52rem] border-collapse text-sm">
             <thead>
               <tr className="border-b border-marca-borda text-left">
-                {["Nome", "E-mail", "Papel", "Instituição", "Situação", "Ações"].map((h) => (
+                {["Usuário", "Papel", "Instituições", "Situação", "Ações"].map((h) => (
                   <th
                     key={h}
                     scope="col"
@@ -262,40 +370,62 @@ export function AbaUsuarios({
               {usuarios.map((u) => {
                 const gerenciavel = podeGerenciarUsuario(ator, u);
                 const ehVendedor = u.papel === "vendedor";
+                const carregando = ocupado === u.id;
 
                 return (
                   <tr key={u.id} className="border-b border-marca-borda/60">
                     <th scope="row" className="px-2 py-2.5 text-left font-semibold">
-                      {u.nome}
-                      {u.id === ator.id ? (
-                        <span className="ml-1.5 text-xs font-normal text-marca-texto-suave">
-                          (você)
+                      <span className="flex items-center gap-2.5">
+                        <Avatar
+                          usuarioId={u.id}
+                          nome={u.nome}
+                          temFoto={u.temFoto}
+                          tamanho="md"
+                        />
+                        <span className="min-w-0">
+                          <span className="block truncate">
+                            {u.nome}
+                            {u.id === ator.id ? (
+                              <span className="ml-1.5 text-xs font-normal text-marca-texto-suave">
+                                (você)
+                              </span>
+                            ) : null}
+                          </span>
+                          <span className="block truncate text-xs font-normal text-marca-texto-suave">
+                            {u.email}
+                          </span>
+                          {u.senhaProvisoria ? (
+                            <span className="mt-0.5 inline-block rounded-full bg-marca-amarelo-suave px-1.5 py-0.5 text-[10px] font-bold text-marca-laranja">
+                              senha provisória
+                            </span>
+                          ) : null}
                         </span>
-                      ) : null}
+                      </span>
                     </th>
-                    <td className="px-2 py-2.5 text-marca-texto-suave">{u.email}</td>
+
                     <td className="px-2 py-2.5">{ROTULO_PAPEL[u.papel]}</td>
 
                     <td className="px-2 py-2.5">
                       {ehVendedor ? (
                         gerenciavel ? (
-                          <select
-                            aria-label={`Instituição de ${u.nome}`}
-                            value={u.instituicao ?? ""}
-                            disabled={ocupado === u.id}
-                            onChange={(e) =>
-                              alterar(u, { instituicao: e.target.value as Instituicao })
-                            }
-                            className="rounded-lg border-2 border-marca-borda px-2 py-1 text-sm focus:border-marca-azul disabled:opacity-50"
-                          >
-                            {INSTITUICOES.map((i) => (
-                              <option key={i} value={i}>
-                                {i}
-                              </option>
-                            ))}
-                          </select>
+                          <EscolherInstituicoes
+                            valor={u.instituicoes}
+                            desabilitado={carregando}
+                            onChange={(v) => {
+                              // O servidor recusa vendedor sem instituição —
+                              // avisamos aqui em vez de deixar o erro estourar.
+                              if (v.length === 0) {
+                                setErro("O vendedor precisa de ao menos uma instituição.");
+                                return;
+                              }
+                              setErro(null);
+                              alterar(u, { instituicoes: v });
+                            }}
+                          />
+                        ) : u.instituicoes.length > 0 ? (
+                          u.instituicoes.join(", ")
                         ) : (
-                          (u.instituicao ?? "—")
+                          "—"
                         )
                       ) : (
                         <span className="text-marca-texto-suave">—</span>
@@ -317,16 +447,27 @@ export function AbaUsuarios({
 
                     <td className="px-2 py-2.5">
                       {gerenciavel ? (
-                        <Botao
-                          variante={u.ativo ? "perigo" : "sutil"}
-                          onClick={() => alterar(u, { ativo: !u.ativo })}
-                          disabled={ocupado === u.id}
-                        >
-                          {ocupado === u.id ? (
-                            <Loader2 aria-hidden="true" className="size-4 animate-spin" />
-                          ) : null}
-                          {u.ativo ? "Desativar" : "Reativar"}
-                        </Botao>
+                        <span className="flex flex-wrap gap-1.5">
+                          <Botao
+                            variante="sutil"
+                            onClick={() => resetar(u)}
+                            disabled={carregando}
+                            title="Redefinir a senha para a senha padrão"
+                          >
+                            <KeyRound aria-hidden="true" className="size-4" />
+                            Resetar senha
+                          </Botao>
+                          <Botao
+                            variante={u.ativo ? "perigo" : "sutil"}
+                            onClick={() => alterar(u, { ativo: !u.ativo })}
+                            disabled={carregando}
+                          >
+                            {carregando ? (
+                              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+                            ) : null}
+                            {u.ativo ? "Desativar" : "Reativar"}
+                          </Botao>
+                        </span>
                       ) : (
                         <span className="text-xs text-marca-texto-suave">—</span>
                       )}
@@ -339,7 +480,8 @@ export function AbaUsuarios({
         </div>
 
         <p className="mt-3 text-xs text-marca-texto-suave">
-          Desativar um usuário encerra as sessões dele imediatamente.
+          Desativar um usuário ou redefinir a senha dele encerra as sessões
+          imediatamente.
         </p>
       </Card>
     </div>

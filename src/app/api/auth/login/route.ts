@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 
 import { autenticar, criarSessao, limparSessoesVencidas } from "@/server/auth";
+import { registrarEvento } from "@/server/eventos";
 import { responderErro } from "@/app/api/_lib/responder";
 
 export const runtime = "nodejs";
@@ -24,7 +25,19 @@ export async function POST(request: Request) {
     await criarSessao(usuario.id);
     await limparSessoesVencidas();
 
-    return NextResponse.json({ ok: true, papel: usuario.papel });
+    await registrarEvento({
+      usuarioId: usuario.id,
+      tipo: "login",
+      descricao: "Entrou no sistema",
+    });
+
+    // `senhaProvisoria` diz ao cliente que ele precisa ir trocar a senha antes
+    // de mais nada. O servidor barra as demais rotas de qualquer forma.
+    return NextResponse.json({
+      ok: true,
+      papel: usuario.papel,
+      senhaProvisoria: usuario.senhaProvisoria,
+    });
   } catch (erro) {
     return responderErro(erro);
   }

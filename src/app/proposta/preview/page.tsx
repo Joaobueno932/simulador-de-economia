@@ -16,6 +16,7 @@ export const dynamic = "force-dynamic";
 export default async function PreviewPage() {
   const sessao = await sessaoAtual();
   if (!sessao) redirect("/login");
+  if (sessao.usuario.senhaProvisoria) redirect("/trocar-senha");
 
   const config = await carregarConfiguracao();
 

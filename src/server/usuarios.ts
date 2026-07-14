@@ -6,22 +6,33 @@ import "server-only";
  */
 
 import { consultar, consultarUm } from "./db";
-import { ErroProibido, hashDeSenha } from "./auth";
+import { ErroProibido, hashDeSenha, paraUsuario, SELECT_USUARIO } from "./auth";
 import {
   podeCriarPapel,
   podeGerenciarUsuario,
+  podeResetarSenha,
+  SENHA_PADRAO,
   type Instituicao,
   type Papel,
   type Usuario,
 } from "@/domain/auth/types";
+
+export class ErroDeNegocio extends Error {
+  readonly status = 400;
+}
+
+/** Tamanho máximo do avatar aceito pelo servidor (já redimensionado no cliente). */
+export const MAX_FOTO_BYTES = 512 * 1024;
 
 interface LinhaUsuario {
   id: number;
   nome: string;
   email: string;
   papel: Papel;
-  instituicao: Instituicao | null;
   ativo: boolean;
+  senha_provisoria: boolean;
+  tem_foto: boolean;
+  instituicoes: Instituicao[] | null;
   criado_em: Date;
 }
 
@@ -31,12 +42,7 @@ export interface UsuarioListado extends Usuario {
 
 function paraListado(l: LinhaUsuario): UsuarioListado {
   return {
-    id: Number(l.id),
-    nome: l.nome,
-    email: l.email,
-    papel: l.papel,
-    instituicao: l.instituicao,
-    ativo: l.ativo,
+    ...paraUsuario(l),
     criadoEm: l.criado_em.toISOString(),
   };
 }
@@ -44,11 +50,11 @@ function paraListado(l: LinhaUsuario): UsuarioListado {
 /** Todos os usuários (admin e gestor enxergam a base inteira). */
 export async function listarUsuarios(): Promise<UsuarioListado[]> {
   const linhas = await consultar<LinhaUsuario>(
-    `SELECT id, nome, email, papel, instituicao, ativo, criado_em
-       FROM usuarios
+    `SELECT ${SELECT_USUARIO}, u.criado_em
+       FROM usuarios u
       ORDER BY
-        CASE papel WHEN 'admin' THEN 0 WHEN 'gestor' THEN 1 ELSE 2 END,
-        nome`,
+        CASE u.papel WHEN 'admin' THEN 0 WHEN 'gestor' THEN 1 ELSE 2 END,
+        u.nome`,
   );
   return linhas.map(paraListado);
 }
@@ -56,33 +62,47 @@ export async function listarUsuarios(): Promise<UsuarioListado[]> {
 /** Vendedores ativos — alimenta o seletor de consultor na proposta. */
 export async function listarVendedoresAtivos(): Promise<UsuarioListado[]> {
   const linhas = await consultar<LinhaUsuario>(
-    `SELECT id, nome, email, papel, instituicao, ativo, criado_em
-       FROM usuarios
-      WHERE papel = 'vendedor' AND ativo = TRUE
-      ORDER BY nome`,
+    `SELECT ${SELECT_USUARIO}, u.criado_em
+       FROM usuarios u
+      WHERE u.papel = 'vendedor' AND u.ativo = TRUE
+      ORDER BY u.nome`,
   );
   return linhas.map(paraListado);
 }
 
 export async function buscarUsuario(id: number): Promise<UsuarioListado | null> {
   const l = await consultarUm<LinhaUsuario>(
-    `SELECT id, nome, email, papel, instituicao, ativo, criado_em
-       FROM usuarios WHERE id = $1`,
+    `SELECT ${SELECT_USUARIO}, u.criado_em FROM usuarios u WHERE u.id = $1`,
     [id],
   );
   return l ? paraListado(l) : null;
 }
 
-export class ErroDeNegocio extends Error {
-  readonly status = 400;
+/** Substitui as instituições do vendedor pelo conjunto informado. */
+async function definirInstituicoes(
+  usuarioId: number,
+  instituicoes: readonly Instituicao[],
+): Promise<void> {
+  await consultar(`DELETE FROM usuario_instituicoes WHERE usuario_id = $1`, [usuarioId]);
+
+  for (const i of new Set(instituicoes)) {
+    await consultar(
+      `INSERT INTO usuario_instituicoes (usuario_id, instituicao)
+       VALUES ($1, $2) ON CONFLICT DO NOTHING`,
+      [usuarioId, i],
+    );
+  }
 }
 
 export interface NovoUsuario {
   nome: string;
   email: string;
-  senha: string;
+  /** Quando ausente, usa a senha padrão e marca como provisória. */
+  senha?: string | null;
+  /** Força a senha padrão + troca no primeiro acesso. */
+  usarSenhaPadrao?: boolean;
   papel: Papel;
-  instituicao: Instituicao | null;
+  instituicoes: readonly Instituicao[];
 }
 
 export async function criarUsuario(ator: Usuario, dados: NovoUsuario): Promise<UsuarioListado> {
@@ -94,12 +114,11 @@ export async function criarUsuario(ator: Usuario, dados: NovoUsuario): Promise<U
     );
   }
 
-  // A regra "vendedor tem instituição, os outros não" também está no banco
-  // (CHECK), mas aqui devolvemos uma mensagem legível em vez de erro de SQL.
-  if (dados.papel === "vendedor" && !dados.instituicao) {
-    throw new ErroDeNegocio("Selecione a instituição do vendedor.");
+  // Instituição serve só para métrica — e só faz sentido em vendedor.
+  const instituicoes = dados.papel === "vendedor" ? dados.instituicoes : [];
+  if (dados.papel === "vendedor" && instituicoes.length === 0) {
+    throw new ErroDeNegocio("Selecione ao menos uma instituição para o vendedor.");
   }
-  const instituicao = dados.papel === "vendedor" ? dados.instituicao : null;
 
   const jaExiste = await consultarUm<{ id: number }>(
     `SELECT id FROM usuarios WHERE LOWER(email) = LOWER($1)`,
@@ -107,29 +126,35 @@ export async function criarUsuario(ator: Usuario, dados: NovoUsuario): Promise<U
   );
   if (jaExiste) throw new ErroDeNegocio("Já existe um usuário com esse e-mail.");
 
-  const linha = await consultarUm<LinhaUsuario>(
-    `INSERT INTO usuarios (nome, email, senha_hash, papel, instituicao, criado_por)
+  const comSenhaPadrao = dados.usarSenhaPadrao || !dados.senha;
+  const senha = comSenhaPadrao ? SENHA_PADRAO : (dados.senha as string);
+
+  const linha = await consultarUm<{ id: number }>(
+    `INSERT INTO usuarios (nome, email, senha_hash, papel, criado_por, senha_provisoria)
      VALUES ($1, $2, $3, $4, $5, $6)
-     RETURNING id, nome, email, papel, instituicao, ativo, criado_em`,
+     RETURNING id`,
     [
       dados.nome.trim(),
       dados.email.trim().toLowerCase(),
-      await hashDeSenha(dados.senha),
+      await hashDeSenha(senha),
       dados.papel,
-      instituicao,
       ator.id,
+      comSenhaPadrao,
     ],
   );
 
-  return paraListado(linha as LinhaUsuario);
+  const id = Number(linha?.id);
+  if (instituicoes.length > 0) await definirInstituicoes(id, instituicoes);
+
+  const criado = await buscarUsuario(id);
+  if (!criado) throw new ErroDeNegocio("Falha ao criar o usuário.");
+  return criado;
 }
 
 export interface EdicaoUsuario {
   nome?: string;
-  instituicao?: Instituicao | null;
+  instituicoes?: readonly Instituicao[];
   ativo?: boolean;
-  /** Opcional: quando vem, redefine a senha. */
-  senha?: string;
 }
 
 export async function editarUsuario(
@@ -148,42 +173,111 @@ export async function editarUsuario(
     );
   }
 
-  // Instituição só faz sentido para vendedor.
-  if (dados.instituicao !== undefined && alvo.papel !== "vendedor" && dados.instituicao !== null) {
-    throw new ErroDeNegocio("Apenas vendedores têm instituição.");
-  }
-  if (alvo.papel === "vendedor" && dados.instituicao === null) {
-    throw new ErroDeNegocio("O vendedor precisa de uma instituição.");
+  if (dados.instituicoes !== undefined) {
+    if (alvo.papel !== "vendedor" && dados.instituicoes.length > 0) {
+      throw new ErroDeNegocio("Apenas vendedores têm instituições.");
+    }
+    if (alvo.papel === "vendedor" && dados.instituicoes.length === 0) {
+      throw new ErroDeNegocio("O vendedor precisa de ao menos uma instituição.");
+    }
   }
 
   const campos: string[] = [];
   const valores: unknown[] = [];
-  const add = (sql: string, valor: unknown) => {
+  const add = (coluna: string, valor: unknown) => {
     valores.push(valor);
-    campos.push(`${sql} = $${valores.length}`);
+    campos.push(`${coluna} = $${valores.length}`);
   };
 
   if (dados.nome !== undefined) add("nome", dados.nome.trim());
-  if (dados.instituicao !== undefined) add("instituicao", dados.instituicao);
   if (dados.ativo !== undefined) add("ativo", dados.ativo);
-  if (dados.senha) add("senha_hash", await hashDeSenha(dados.senha));
 
-  if (campos.length === 0) return alvo;
+  if (campos.length > 0) {
+    campos.push("atualizado_em = NOW()");
+    valores.push(alvoId);
+    await consultar(
+      `UPDATE usuarios SET ${campos.join(", ")} WHERE id = $${valores.length}`,
+      valores,
+    );
+  }
 
-  campos.push("atualizado_em = NOW()");
-  valores.push(alvoId);
-
-  const linha = await consultarUm<LinhaUsuario>(
-    `UPDATE usuarios SET ${campos.join(", ")}
-      WHERE id = $${valores.length}
-      RETURNING id, nome, email, papel, instituicao, ativo, criado_em`,
-    valores,
-  );
+  if (dados.instituicoes !== undefined && alvo.papel === "vendedor") {
+    await definirInstituicoes(alvoId, dados.instituicoes);
+  }
 
   // Desativar alguém derruba as sessões dele na hora.
   if (dados.ativo === false) {
     await consultar(`DELETE FROM sessoes WHERE usuario_id = $1`, [alvoId]);
   }
 
-  return paraListado(linha as LinhaUsuario);
+  const atualizado = await buscarUsuario(alvoId);
+  if (!atualizado) throw new ErroDeNegocio("Usuário não encontrado.");
+  return atualizado;
+}
+
+/**
+ * Redefine a senha do usuário para a senha padrão e marca como provisória.
+ *
+ * Derruba as sessões dele: quem estava logado sai. No próximo acesso ele entra
+ * com a senha padrão e é obrigado a escolher uma nova.
+ */
+export async function resetarSenha(ator: Usuario, alvoId: number): Promise<UsuarioListado> {
+  if (!podeResetarSenha(ator.papel)) {
+    throw new ErroProibido("Você não pode redefinir senhas.");
+  }
+
+  const alvo = await buscarUsuario(alvoId);
+  if (!alvo) throw new ErroDeNegocio("Usuário não encontrado.");
+
+  if (!podeGerenciarUsuario(ator, alvo)) {
+    throw new ErroProibido(
+      ator.id === alvo.id
+        ? "Para trocar a própria senha, use o seu perfil."
+        : "Você não tem permissão para redefinir a senha deste usuário.",
+    );
+  }
+
+  await consultar(
+    `UPDATE usuarios
+        SET senha_hash = $1, senha_provisoria = TRUE, atualizado_em = NOW()
+      WHERE id = $2`,
+    [await hashDeSenha(SENHA_PADRAO), alvoId],
+  );
+
+  await consultar(`DELETE FROM sessoes WHERE usuario_id = $1`, [alvoId]);
+
+  const atualizado = await buscarUsuario(alvoId);
+  if (!atualizado) throw new ErroDeNegocio("Usuário não encontrado.");
+  return atualizado;
+}
+
+/** Grava a foto de perfil do PRÓPRIO usuário. */
+export async function salvarFoto(
+  usuarioId: number,
+  bytes: Buffer,
+  mime: string,
+): Promise<void> {
+  if (bytes.byteLength === 0) throw new ErroDeNegocio("Arquivo vazio.");
+  if (bytes.byteLength > MAX_FOTO_BYTES) {
+    throw new ErroDeNegocio("A foto é grande demais. Envie uma imagem menor.");
+  }
+  if (!["image/png", "image/jpeg", "image/webp"].includes(mime)) {
+    throw new ErroDeNegocio("Formato inválido. Use PNG, JPEG ou WebP.");
+  }
+
+  await consultar(
+    `UPDATE usuarios SET foto = $1, foto_mime = $2, atualizado_em = NOW() WHERE id = $3`,
+    [bytes, mime, usuarioId],
+  );
+}
+
+export async function buscarFoto(
+  usuarioId: number,
+): Promise<{ bytes: Buffer; mime: string } | null> {
+  const l = await consultarUm<{ foto: Buffer | null; foto_mime: string | null }>(
+    `SELECT foto, foto_mime FROM usuarios WHERE id = $1`,
+    [usuarioId],
+  );
+  if (!l?.foto || !l.foto_mime) return null;
+  return { bytes: l.foto, mime: l.foto_mime };
 }

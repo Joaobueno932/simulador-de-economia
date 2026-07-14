@@ -2,23 +2,25 @@
  * POST /api/proposta/pdf
  *
  * Recebe APENAS as entradas da simulação. O servidor:
- *   1. exige sessão válida;
+ *   1. exige sessão válida (e senha já trocada);
  *   2. valida as entradas com o mesmo schema Zod do formulário;
  *   3. impõe as regras que o navegador não pode escolher: consultor, data,
  *      validade e — o ponto sensível — o desconto;
  *   4. RECALCULA tudo com a config do banco;
- *   5. renderiza a proposta e devolve o PDF.
+ *   5. registra a proposta (histórico do gestor) e devolve o PDF.
  */
 
 import { NextResponse } from "next/server";
 
 import { calcularSimulacao } from "@/domain/simulator/calculations";
-import { nomeArquivoProposta } from "@/domain/simulator/format";
+import { formatarMoeda, nomeArquivoProposta } from "@/domain/simulator/format";
 import { simulacaoSchema } from "@/domain/simulator/validation";
 import { podeEditarDescontoLivremente, podeEscolherConsultor } from "@/domain/auth/types";
-import { exigirSessao } from "@/server/auth";
+import { exigirSessaoAtiva } from "@/server/auth";
 import { carregarConfiguracao } from "@/server/configuracao";
+import { registrarEvento } from "@/server/eventos";
 import { gerarPdfProposta } from "@/server/pdf";
+import { registrarProposta } from "@/server/propostas";
 import { listarVendedoresAtivos } from "@/server/usuarios";
 import { responderErro } from "@/app/api/_lib/responder";
 
@@ -28,7 +30,7 @@ export const maxDuration = 60;
 
 export async function POST(request: Request) {
   try {
-    const { usuario, descontoLiberado } = await exigirSessao();
+    const { usuario, descontoLiberado } = await exigirSessaoAtiva();
 
     let corpo: unknown;
     try {
@@ -79,15 +81,20 @@ export async function POST(request: Request) {
     // Consultor: vendedor emite sempre em nome de si mesmo. Admin/gestor podem
     // escolher, mas só entre vendedores que existem de fato.
     let consultor = usuario.nome;
+    let vendedorId: number | null = usuario.papel === "vendedor" ? usuario.id : null;
+
     if (podeEscolherConsultor(usuario.papel)) {
       const vendedores = await listarVendedoresAtivos();
       const escolhido = enviada.cliente.consultor.trim();
-      const valido =
-        escolhido === usuario.nome || vendedores.some((v) => v.nome === escolhido);
-      if (!valido) {
+      const vendedor = vendedores.find((v) => v.nome === escolhido);
+
+      if (!vendedor && escolhido !== usuario.nome) {
         return NextResponse.json({ erro: "Consultor inválido." }, { status: 400 });
       }
+
       consultor = escolhido;
+      // Se o gestor emitiu em nome de um vendedor, a métrica vai para o vendedor.
+      vendedorId = vendedor?.id ?? null;
     }
 
     // Data e validade vêm do servidor/config, não do formulário.
@@ -106,6 +113,25 @@ export async function POST(request: Request) {
     // Recálculo no servidor, com a config do banco — a fonte de verdade do PDF.
     const resultado = calcularSimulacao(simulacao, config);
     const pdf = await gerarPdfProposta(simulacao.cliente, resultado, config);
+
+    // Histórico: guardamos entradas + config (não os bytes do PDF), para o
+    // gestor poder reabrir a proposta exatamente como foi emitida.
+    const propostaId = await registrarProposta({
+      usuarioId: usuario.id,
+      vendedorId,
+      simulacao,
+      resultado,
+      configuracao: config,
+    });
+
+    await registrarEvento({
+      usuarioId: usuario.id,
+      tipo: "proposta_gerada",
+      descricao:
+        `Gerou proposta para ${simulacao.cliente.nome} ` +
+        `(economia anual de ${formatarMoeda(resultado.economiaAnual)})`,
+      propostaId,
+    });
 
     const arquivo = nomeArquivoProposta(simulacao.cliente.nome, simulacao.cliente.dataProposta);
 

@@ -22,6 +22,7 @@ export const metadata = {
 export default async function AdminPage() {
   const usuario = await usuarioAtual();
   if (!usuario) redirect("/login");
+  if (usuario.senhaProvisoria) redirect("/trocar-senha");
   if (!podeAdministrar(usuario.papel)) redirect("/");
 
   const [config, usuarios, meta] = await Promise.all([

@@ -108,7 +108,10 @@ export function AbaSenhas({ vendedores }: { vendedores: readonly UsuarioListado[
           }}
           opcoes={vendedores.map((v) => ({
             value: String(v.id),
-            label: v.instituicao ? `${v.nome} — ${v.instituicao}` : v.nome,
+            label:
+              v.instituicoes.length > 0
+                ? `${v.nome} — ${v.instituicoes.join(", ")}`
+                : v.nome,
           }))}
           ajuda="A senha só funciona para o vendedor escolhido."
         />
