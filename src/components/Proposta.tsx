@@ -20,7 +20,6 @@
 import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
 import {
   formatarData,
-  formatarDecimal,
   formatarDocumento,
   formatarKwh,
   formatarMoeda,
@@ -50,10 +49,21 @@ const AZUL = "#0F579F";
 const AZUL_ESCURO = "#0A3D70";
 const VERDE = "#3AAA35";
 const VERDE_CLARO = "#95C11F";
-const LARANJA = "#F08120";
 const TEXTO = "#1C2B3A";
 const CINZA = "#6B7A89";
 const BORDA = "#D7E1EB";
+
+/**
+ * Identidade visual da conta da distribuidora, para a mini-fatura ILUSTRATIVA.
+ *
+ * Cores amostradas da conta real (faixa pêssego no topo, faixa turquesa à
+ * esquerda, campos com borda azul). NÃO reproduzimos o logotipo deles: a
+ * mini-fatura é um desenho explicativo, identificado como ilustrativo, e serve
+ * só para o cliente reconhecer "esta é a conta que você já conhece".
+ */
+const DIST_PESSEGO = "#EFA96C";
+const DIST_TURQUESA = "#2BA6C6";
+const DIST_GRAFITE = "#3C3C3B";
 
 const FONTE =
   '"Segoe UI", "Helvetica Neue", Arial, "Liberation Sans", system-ui, sans-serif';
@@ -130,127 +140,357 @@ function TituloSecao({ children }: { children: React.ReactNode }) {
 }
 
 /**
- * Composição da fatura — o `chart1` da planilha (colunas empilhadas).
+ * Mini-fatura ILUSTRATIVA.
  *
- * A coluna "com Em Conta" tem o MESMO total da fatura atual: Energisa + Locação
- * + Economia. É isso que mostra a economia como a fatia poupada.
+ * O ponto que o cliente precisa entender é que ele passa a ter DUAS contas — e
+ * que a soma das duas é menor do que a única conta de hoje. Texto sozinho não
+ * resolve isso; o cliente reconhece a conta pela cara dela. Então desenhamos as
+ * duas: uma com a identidade da distribuidora (pêssego + turquesa), outra com a
+ * da Em Conta (azul + verde).
+ *
+ * Não há reprodução de logotipo de terceiro — é um desenho explicativo, marcado
+ * como ilustrativo.
  */
-function GraficoComposicao({ r }: { r: ResultadoSimulacao }) {
-  const total = r.faturaAtual;
-
-  const W = 46;
-  const H = 52;
-  const larguraBarra = 14;
-  const x1 = 4;
-  const x2 = 27;
-
-  const escala = (v: number) => (total > 0 ? (v / total) * H : 0);
-
-  const hEnergisa = escala(r.valorPagoDistribuidora);
-  const hLocacao = escala(r.valorPagoLocador);
-  const hEconomia = escala(r.economiaMensal);
-
+function MiniFatura({
+  emissor,
+  subtitulo,
+  valor,
+  descricao,
+  corFaixa,
+  corLateral,
+  corTexto,
+  corValor,
+}: {
+  emissor: string;
+  subtitulo: string;
+  valor: number;
+  descricao: string;
+  corFaixa: string;
+  corLateral: string;
+  corTexto: string;
+  corValor: string;
+}) {
   return (
-    <svg
-      width="100%"
-      viewBox={`0 0 ${W} ${H + 6}`}
-      role="img"
-      aria-label={`Composição da fatura. Fatura atual ${formatarMoeda(
-        r.faturaAtual,
-      )}. Com Em Conta: Energisa ${formatarMoeda(
-        r.valorPagoDistribuidora,
-      )}, locação ${formatarMoeda(r.valorPagoLocador)}, economia ${formatarMoeda(
-        r.economiaMensal,
-      )}.`}
-      style={{ display: "block", overflow: "visible" }}
+    <div
+      style={{
+        flex: 1,
+        minWidth: 0,
+        border: `1px solid ${BORDA}`,
+        borderRadius: "2.5mm",
+        overflow: "hidden",
+        background: "#fff",
+        display: "flex",
+        flexDirection: "column",
+      }}
     >
-      {/* Coluna 1 — fatura atual, bloco único */}
-      <rect x={x1} y={0} width={larguraBarra} height={H} rx={1} fill={AZUL} />
-      <text
-        x={x1 + larguraBarra / 2}
-        y={H + 4}
-        textAnchor="middle"
-        fontSize="2.6"
-        fontWeight="700"
-        fill={CINZA}
-        fontFamily={FONTE}
+      {/* Faixa superior — é o que dá a "cara" da conta. */}
+      <div
+        style={{
+          background: corFaixa,
+          padding: "1.6mm 2.5mm",
+          display: "flex",
+          alignItems: "center",
+          gap: "1.5mm",
+        }}
       >
-        ATUAL
-      </text>
+        <span
+          style={{
+            width: "1.5mm",
+            height: "5mm",
+            background: corLateral,
+            borderRadius: "1mm",
+            display: "block",
+            flexShrink: 0,
+          }}
+        />
+        <span style={{ minWidth: 0 }}>
+          <span
+            style={{
+              display: "block",
+              fontSize: "7.6pt",
+              fontWeight: 800,
+              color: corTexto,
+              lineHeight: 1.1,
+              letterSpacing: "0.02em",
+            }}
+          >
+            {emissor}
+          </span>
+          <span
+            style={{
+              display: "block",
+              fontSize: "5pt",
+              fontWeight: 600,
+              color: corTexto,
+              opacity: 0.85,
+            }}
+          >
+            {subtitulo}
+          </span>
+        </span>
+      </div>
 
-      {/* Coluna 2 — empilhada: economia (topo), locação, energisa (base) */}
-      <rect x={x2} y={0} width={larguraBarra} height={hEconomia} rx={1} fill={VERDE} />
-      <rect x={x2} y={hEconomia} width={larguraBarra} height={hLocacao} fill={LARANJA} />
-      <rect
-        x={x2}
-        y={hEconomia + hLocacao}
-        width={larguraBarra}
-        height={hEnergisa}
-        rx={1}
-        fill={AZUL}
-      />
-      <text
-        x={x2 + larguraBarra / 2}
-        y={H + 4}
-        textAnchor="middle"
-        fontSize="2.6"
-        fontWeight="700"
-        fill={CINZA}
-        fontFamily={FONTE}
-      >
-        EM CONTA
-      </text>
-    </svg>
+      {/* Corpo */}
+      <div style={{ padding: "2mm 2.5mm", flex: 1 }}>
+        <div style={{ fontSize: "5.2pt", color: CINZA, textTransform: "uppercase" }}>
+          Total a pagar
+        </div>
+        <div
+          style={{
+            fontSize: "12.5pt",
+            fontWeight: 800,
+            color: corValor,
+            lineHeight: 1.15,
+            letterSpacing: "-0.01em",
+          }}
+        >
+          {formatarMoeda(valor)}
+        </div>
+        <div style={{ fontSize: "5.4pt", color: TEXTO, marginTop: "0.8mm", lineHeight: 1.3 }}>
+          {descricao}
+        </div>
+      </div>
+    </div>
   );
 }
 
-/** Projeção de 5 anos por bandeira — o `chart2` da planilha (barras horizontais). */
-function GraficoBandeiras({ r }: { r: ResultadoSimulacao }) {
-  const linhas = [
-    { rotulo: "Verde", valor: r.projecaoCincoAnos.verde, cor: VERDE },
-    { rotulo: "Amarela", valor: r.projecaoCincoAnos.amarela, cor: "#F2C200" },
-    { rotulo: "Vermelha P1", valor: r.projecaoCincoAnos.vermelhaP1, cor: LARANJA },
-    { rotulo: "Vermelha P2", valor: r.projecaoCincoAnos.vermelhaP2, cor: "#D42A21" },
-  ];
-  const maximo = Math.max(...linhas.map((l) => l.valor), 1);
+/** Sinal grande (+ ou =) entre as mini-faturas. */
+function Sinal({ children }: { children: React.ReactNode }) {
+  return (
+    <div
+      aria-hidden="true"
+      style={{
+        fontSize: "13pt",
+        fontWeight: 800,
+        color: CINZA,
+        flexShrink: 0,
+        alignSelf: "center",
+        padding: "0 0.5mm",
+      }}
+    >
+      {children}
+    </div>
+  );
+}
+
+/**
+ * Barra HORIZONTAL de uma unidade consumidora.
+ *
+ * Duas linhas na mesma escala:
+ *   HOJE      — a conta única de hoje (barra cheia)
+ *   COM EM CONTA — Energisa + Em Conta + a fatia poupada (verde)
+ *
+ * As duas barras têm o mesmo comprimento total, então a fatia verde é
+ * literalmente "o pedaço que sai do bolso hoje e deixa de sair". É o mesmo
+ * raciocínio do gráfico da planilha, na horizontal e por unidade.
+ */
+function BarraUC({
+  nome,
+  faturaAtual,
+  residual,
+  locacao,
+  economia,
+  altura,
+  compacto,
+}: {
+  nome: string;
+  faturaAtual: number;
+  residual: number;
+  locacao: number;
+  economia: number;
+  altura: string;
+  compacto: boolean;
+}) {
+  const pct = (v: number) => (faturaAtual > 0 ? (v / faturaAtual) * 100 : 0);
+
+  /**
+   * Com muitas unidades, duas barras por UC não cabem na página — o rodapé era
+   * empurrado para fora. Neste caso usamos UMA barra empilhada por unidade: o
+   * comprimento total continua sendo a conta de hoje, a parte clara no fim é o
+   * que ele deixa de pagar, e o valor economizado de cada unidade segue visível
+   * (que é o ponto).
+   */
+  if (compacto) {
+    return (
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5mm" }}>
+        <span
+          style={{
+            width: "11mm",
+            flexShrink: 0,
+            fontSize: "5.6pt",
+            fontWeight: 800,
+            color: TEXTO,
+          }}
+        >
+          {nome}
+        </span>
+
+        <span
+          style={{
+            flex: 1,
+            height: altura,
+            display: "flex",
+            borderRadius: "1mm",
+            overflow: "hidden",
+            background: "#EDF1F5",
+          }}
+        >
+          <span style={{ width: `${pct(residual)}%`, background: DIST_TURQUESA, display: "block" }} />
+          <span style={{ width: `${pct(locacao)}%`, background: VERDE, display: "block" }} />
+          <span
+            style={{
+              width: `${pct(economia)}%`,
+              background: "#D8EFD7",
+              display: "block",
+              borderLeft: `0.4mm solid ${VERDE}`,
+            }}
+          />
+        </span>
+
+        <span
+          style={{
+            width: "16mm",
+            flexShrink: 0,
+            fontSize: "5.4pt",
+            color: CINZA,
+            textAlign: "right",
+          }}
+        >
+          {formatarMoeda(faturaAtual)}
+        </span>
+        <span style={{ fontSize: "5.4pt", color: CINZA, flexShrink: 0 }}>→</span>
+        <span
+          style={{
+            width: "16mm",
+            flexShrink: 0,
+            fontSize: "5.6pt",
+            fontWeight: 800,
+            color: TEXTO,
+            textAlign: "right",
+          }}
+        >
+          {formatarMoeda(residual + locacao)}
+        </span>
+        <span
+          style={{
+            width: "21mm",
+            flexShrink: 0,
+            fontSize: "5.6pt",
+            fontWeight: 800,
+            color: VERDE,
+            textAlign: "right",
+          }}
+        >
+          −{formatarMoeda(economia)}
+        </span>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "1.6mm" }}>
-      {linhas.map((l) => (
-        <div key={l.rotulo}>
-          <div
+    <div>
+      <div
+        style={{
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "baseline",
+          marginBottom: "0.8mm",
+        }}
+      >
+        <span style={{ fontSize: "6.6pt", fontWeight: 800, color: TEXTO }}>{nome}</span>
+        <span style={{ fontSize: "6.6pt", fontWeight: 800, color: VERDE }}>
+          economiza {formatarMoeda(economia)}/mês
+        </span>
+      </div>
+
+      {/* HOJE */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", marginBottom: "0.8mm" }}>
+        <span
+          style={{
+            width: "14mm",
+            flexShrink: 0,
+            fontSize: "5pt",
+            fontWeight: 700,
+            color: CINZA,
+            textAlign: "right",
+          }}
+        >
+          HOJE
+        </span>
+        <span
+          style={{
+            flex: 1,
+            height: altura,
+            background: DIST_TURQUESA,
+            borderRadius: "1mm",
+            display: "block",
+          }}
+        />
+        <span
+          style={{
+            width: "17mm",
+            flexShrink: 0,
+            fontSize: "5.8pt",
+            fontWeight: 700,
+            color: TEXTO,
+            textAlign: "right",
+          }}
+        >
+          {formatarMoeda(faturaAtual)}
+        </span>
+      </div>
+
+      {/* COM EM CONTA — mesma largura total, repartida */}
+      <div style={{ display: "flex", alignItems: "center", gap: "1.5mm" }}>
+        <span
+          style={{
+            width: "14mm",
+            flexShrink: 0,
+            fontSize: "5pt",
+            fontWeight: 700,
+            color: CINZA,
+            textAlign: "right",
+          }}
+        >
+          COM EM CONTA
+        </span>
+
+        <span
+          style={{
+            flex: 1,
+            height: altura,
+            display: "flex",
+            borderRadius: "1mm",
+            overflow: "hidden",
+            background: "#EDF1F5",
+          }}
+        >
+          <span style={{ width: `${pct(residual)}%`, background: DIST_TURQUESA, display: "block" }} />
+          <span style={{ width: `${pct(locacao)}%`, background: VERDE, display: "block" }} />
+          {/* A fatia poupada aparece hachurada/clara: é o que ele NÃO paga mais. */}
+          <span
             style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "baseline",
-              marginBottom: "0.5mm",
+              width: `${pct(economia)}%`,
+              background: "#D8EFD7",
+              display: "block",
+              borderLeft: `0.4mm solid ${VERDE}`,
             }}
-          >
-            <span style={{ fontSize: "6.2pt", color: TEXTO, fontWeight: 600 }}>{l.rotulo}</span>
-            <span style={{ fontSize: "6.6pt", fontWeight: 800, color: TEXTO }}>
-              {formatarMoeda(l.valor)}
-            </span>
-          </div>
-          <div
-            style={{
-              height: "2mm",
-              width: "100%",
-              background: "#EDF1F5",
-              borderRadius: "999px",
-              overflow: "hidden",
-            }}
-          >
-            <div
-              style={{
-                height: "100%",
-                width: `${(l.valor / maximo) * 100}%`,
-                background: l.cor,
-                borderRadius: "999px",
-              }}
-            />
-          </div>
-        </div>
-      ))}
+          />
+        </span>
+
+        <span
+          style={{
+            width: "17mm",
+            flexShrink: 0,
+            fontSize: "5.8pt",
+            fontWeight: 800,
+            color: VERDE,
+            textAlign: "right",
+          }}
+        >
+          {formatarMoeda(residual + locacao)}
+        </span>
+      </div>
     </div>
   );
 }
@@ -268,6 +508,26 @@ export function Proposta({
   assets?: AssetsProposta;
 }) {
   const validade = somarDias(cliente.dataProposta, cliente.validadeDias);
+
+  /**
+   * A proposta tem que caber em UMA página A4, com 1 ou com 10 unidades.
+   *
+   * O bloco de barras é o único que cresce com o número de UCs, então é ele que
+   * se ajusta: com poucas unidades as barras ficam altas (e preenchem a folha),
+   * com muitas ficam finas (e nada transborda). Sem isso, 3 UCs já empurravam o
+   * rodapé para fora da página.
+   */
+  const qtdUCs = r.unidades.length;
+
+  // Até 4 unidades cabem as duas barras (HOJE / COM EM CONTA), que é a leitura
+  // mais clara. De 5 em diante, uma barra empilhada por unidade — senão o
+  // rodapé é empurrado para fora da folha.
+  const compacto = qtdUCs > 4;
+
+  const alturaBarra =
+    qtdUCs === 1 ? "5mm" : qtdUCs === 2 ? "3.6mm" : qtdUCs <= 4 ? "2.6mm" : qtdUCs <= 7 ? "3mm" : "2.4mm";
+  const espacoBarras =
+    qtdUCs === 1 ? "3mm" : qtdUCs === 2 ? "2.5mm" : qtdUCs <= 4 ? "1.8mm" : "1.4mm";
 
   return (
     <div
@@ -500,137 +760,166 @@ export function Proposta({
             </div>
           </div>
 
-          {/* Composição da fatura + bandeiras */}
+          {/* ===== AS DUAS FATURAS =====
+              O ponto que mais gera dúvida: o cliente passa a receber DUAS
+              contas. Mostramos as duas com a cara de cada emissor e a soma
+              explícita, comparada com o que ele paga hoje. */}
           <div
             style={{
-              display: "flex",
-              gap: "4mm",
-              marginTop: "4mm",
-              alignItems: "flex-start",
-            }}
-          >
-            {/* Esquerda: gráfico empilhado + legenda */}
-            <div style={{ width: "42mm", flexShrink: 0 }}>
-              <GraficoComposicao r={r} />
-            </div>
-
-            <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column", gap: "2.5mm" }}>
-              <div>
-                <div style={{ fontSize: "8.4pt", fontWeight: 800, color: LARANJA }}>
-                  FATURA EM CONTA
-                </div>
-                <div style={{ fontSize: "12pt", fontWeight: 800, color: LARANJA }}>
-                  {formatarMoeda(r.valorPagoLocador)}
-                </div>
-                <div style={{ fontSize: "5.8pt", color: CINZA }}>
-                  Energia compensada com desconto
-                </div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: "8.4pt", fontWeight: 800, color: AZUL }}>
-                  FATURA {config.institucional.distribuidora.toUpperCase()}
-                </div>
-                <div style={{ fontSize: "12pt", fontWeight: 800, color: AZUL }}>
-                  {formatarMoeda(r.valorPagoDistribuidora)}
-                </div>
-                <div style={{ fontSize: "5.8pt", color: CINZA }}>Taxa mínima + impostos + COSIP</div>
-              </div>
-
-              <div>
-                <div style={{ fontSize: "8.4pt", fontWeight: 800, color: VERDE }}>SUA ECONOMIA</div>
-                <div style={{ fontSize: "12pt", fontWeight: 800, color: VERDE }}>
-                  {formatarMoeda(r.economiaMensal)}
-                </div>
-                <div style={{ fontSize: "5.8pt", color: CINZA }}>
-                  {formatarPercentual(r.economiaPercentualEfetiva)} da fatura atual
-                </div>
-              </div>
-            </div>
-
-            {/* Direita: custos com bandeiras evitados */}
-            <div
-              style={{
-                width: "64mm",
-                flexShrink: 0,
-                border: `1.2px solid ${VERDE_CLARO}`,
-                borderRadius: "3mm",
-                padding: "2.5mm",
-                boxSizing: "border-box",
-              }}
-            >
-              <div
-                style={{
-                  fontSize: "6.4pt",
-                  fontWeight: 800,
-                  color: VERDE,
-                  textTransform: "uppercase",
-                  marginBottom: "0.5mm",
-                }}
-              >
-                Custos com bandeiras tarifárias evitados
-              </div>
-              <div style={{ fontSize: "5.6pt", color: CINZA, marginBottom: "2mm" }}>
-                Previsão de economia em 5 anos
-              </div>
-              <GraficoBandeiras r={r} />
-            </div>
-          </div>
-
-          {/* Rodapé do card: kWp e quota-parte */}
-          <div
-            style={{
-              display: "flex",
-              gap: "4mm",
               marginTop: "3.5mm",
-              paddingTop: "2.5mm",
+              paddingTop: "3mm",
               borderTop: `1px solid ${BORDA}`,
             }}
           >
-            <div style={{ flex: 1 }}>
+            <div
+              style={{
+                fontSize: "8.4pt",
+                fontWeight: 800,
+                color: TEXTO,
+                marginBottom: "0.6mm",
+              }}
+            >
+              A partir de agora você recebe DUAS faturas por mês:
+            </div>
+            <div style={{ fontSize: "6pt", color: CINZA, marginBottom: "2.5mm" }}>
+              Somadas, elas custam menos do que a conta única que você paga hoje. Imagens
+              ilustrativas.
+            </div>
+
+            <div style={{ display: "flex", alignItems: "stretch", gap: "1.5mm" }}>
+              <MiniFatura
+                emissor={config.institucional.distribuidora.toUpperCase()}
+                subtitulo="Continua vindo, mas bem menor"
+                valor={r.valorPagoDistribuidora}
+                descricao="Taxa mínima + impostos + COSIP"
+                corFaixa={DIST_PESSEGO}
+                corLateral={DIST_TURQUESA}
+                corTexto={DIST_GRAFITE}
+                corValor={DIST_GRAFITE}
+              />
+
+              <Sinal>+</Sinal>
+
+              <MiniFatura
+                emissor="EM CONTA"
+                subtitulo="Sua energia renovável"
+                valor={r.valorPagoLocador}
+                descricao="Energia compensada com desconto"
+                corFaixa={VERDE}
+                corLateral={AZUL}
+                corTexto="#FFFFFF"
+                corValor={VERDE}
+              />
+
+              <Sinal>=</Sinal>
+
+              {/* Total: o que ele passa a pagar, contra o que paga hoje. */}
               <div
                 style={{
-                  fontSize: "6.4pt",
-                  fontWeight: 700,
-                  color: CINZA,
-                  textTransform: "uppercase",
+                  flex: 1,
+                  minWidth: 0,
+                  border: `1.5px solid ${VERDE}`,
+                  borderRadius: "2.5mm",
+                  background: "#F2FAF1",
+                  padding: "2.5mm",
+                  display: "flex",
+                  flexDirection: "column",
+                  justifyContent: "center",
                 }}
               >
-                Participação na associação
-              </div>
-              <div style={{ fontSize: "11pt", fontWeight: 800, color: VERDE }}>
-                {formatarDecimal(r.equivalenteKwp)} kWp
+                <div
+                  style={{
+                    fontSize: "5.4pt",
+                    color: VERDE,
+                    fontWeight: 800,
+                    textTransform: "uppercase",
+                  }}
+                >
+                  Você passa a pagar
+                </div>
+                <div
+                  style={{
+                    fontSize: "12.5pt",
+                    fontWeight: 800,
+                    color: VERDE,
+                    lineHeight: 1.15,
+                    letterSpacing: "-0.01em",
+                  }}
+                >
+                  {formatarMoeda(r.faturaComEmConta)}
+                </div>
+                <div style={{ fontSize: "5.4pt", color: CINZA, marginTop: "0.8mm" }}>
+                  Hoje você paga{" "}
+                  <span
+                    style={{
+                      color: DIST_GRAFITE,
+                      fontWeight: 700,
+                      textDecoration: "line-through",
+                    }}
+                  >
+                    {formatarMoeda(r.faturaAtual)}
+                  </span>
+                </div>
+                <div
+                  style={{
+                    marginTop: "1.2mm",
+                    background: VERDE,
+                    color: "#fff",
+                    borderRadius: "999px",
+                    padding: "0.8mm 2mm",
+                    fontSize: "6.2pt",
+                    fontWeight: 800,
+                    textAlign: "center",
+                  }}
+                >
+                  Economia de {formatarMoeda(r.economiaMensal)}/mês
+                </div>
               </div>
             </div>
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontSize: "6.4pt",
-                  fontWeight: 700,
-                  color: CINZA,
-                  textTransform: "uppercase",
-                }}
-              >
-                Quota-parte da potência da usina
-              </div>
-              <div style={{ fontSize: "11pt", fontWeight: 800, color: VERDE }}>
-                {formatarPercentual(r.percentualPotenciaUsina)}
-              </div>
+          </div>
+
+          {/* ===== ECONOMIA POR UNIDADE (barras horizontais) ===== */}
+          <div
+            style={{
+              marginTop: "3.5mm",
+              paddingTop: "3mm",
+              borderTop: `1px solid ${BORDA}`,
+            }}
+          >
+            <div
+              style={{
+                fontSize: "7pt",
+                fontWeight: 800,
+                color: TEXTO,
+                textTransform: "uppercase",
+                marginBottom: "0.6mm",
+              }}
+            >
+              {r.unidades.length > 1
+                ? "Economia em cada unidade consumidora"
+                : "Sua economia na prática"}
             </div>
-            <div style={{ flex: 1 }}>
-              <div
-                style={{
-                  fontSize: "6.4pt",
-                  fontWeight: 700,
-                  color: CINZA,
-                  textTransform: "uppercase",
-                }}
-              >
-                Consumo compensável
-              </div>
-              <div style={{ fontSize: "11pt", fontWeight: 800, color: AZUL }}>
-                {formatarKwh(r.consumoCompensavelMensal)}
-              </div>
+            <div style={{ fontSize: "5.6pt", color: CINZA, marginBottom: "2.5mm" }}>
+              <span style={{ color: DIST_TURQUESA, fontWeight: 700 }}>■</span>{" "}
+              {config.institucional.distribuidora} &nbsp;
+              <span style={{ color: VERDE, fontWeight: 700 }}>■</span> Em Conta &nbsp;
+              <span style={{ color: "#B7DFB4", fontWeight: 700 }}>■</span> o que você deixa de
+              pagar
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: espacoBarras }}>
+              {r.unidades.map((u) => (
+                <BarraUC
+                  key={u.id}
+                  nome={u.nome}
+                  faturaAtual={u.faturaSemLocacao}
+                  residual={u.valorResidual}
+                  locacao={u.custoComLocacao}
+                  economia={u.economia}
+                  altura={alturaBarra}
+                  compacto={compacto}
+                />
+              ))}
             </div>
           </div>
         </div>
@@ -639,7 +928,7 @@ export function Proposta({
       {/* ================= VANTAGENS =================
           Os mesmos três argumentos das peças originais da Em Conta
           (caixas de texto da aba "x Concorrente" da planilha). */}
-      <section style={{ padding: "4mm 8mm 0" }}>
+      <section style={{ padding: "3mm 8mm 0" }}>
         <div style={{ display: "flex", gap: "3mm" }}>
           {[
             {
@@ -661,7 +950,7 @@ export function Proposta({
                 flex: 1,
                 border: `1.2px solid ${BORDA}`,
                 borderRadius: "3mm",
-                padding: "2.5mm 3mm",
+                padding: "2mm 3mm",
                 display: "flex",
                 gap: "2mm",
                 alignItems: "flex-start",
@@ -734,7 +1023,7 @@ export function Proposta({
           }}
         >
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={assets.mascote} alt="" style={{ height: "38mm" }} />
+          <img src={assets.mascote} alt="" style={{ height: "33mm" }} />
 
           <div style={{ textAlign: "right", paddingBottom: "3mm" }}>
             <div

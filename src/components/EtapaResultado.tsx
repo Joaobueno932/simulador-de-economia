@@ -77,56 +77,52 @@ function CardDestaque({
 }
 
 /**
- * Card que começa fechado e o usuário abre quando quiser.
+ * Economia efetiva — métrica interna, escondida do cliente.
  *
- * O valor só é montado quando aberto — enquanto fechado, nem o número aparece na
- * tela (nada de esconder com CSS e deixar o dado visível para quem olha por cima
- * do ombro do vendedor).
+ * O card NÃO existe enquanto está fechado: nem título, nem rótulo, nem espaço
+ * reservado. Em atendimento presencial o cliente lê a tela junto com o vendedor;
+ * qualquer texto do tipo "Economia efetiva — Mostrar" viraria um convite a
+ * "mostra aí". Então, fechado, sobra apenas um ícone cinza e mudo, sem legenda,
+ * que o vendedor sabe onde fica e o cliente não tem como interpretar.
+ *
+ * O valor só é renderizado quando aberto — não fica escondido por CSS, onde
+ * bastaria inspecionar a página (ou um Ctrl+F) para achá-lo.
  */
-function CardRecolhivel({
-  rotulo,
-  valor,
-  icone,
-  nota,
-}: {
-  rotulo: string;
-  valor: string;
-  icone: React.ReactNode;
-  nota?: string;
-}) {
+function EconomiaEfetivaOculta({ r }: { r: ResultadoSimulacao }) {
   const [aberto, setAberto] = useState(false);
 
-  return (
-    <div className="rounded-card border border-marca-borda bg-white p-4">
-      <div className="mb-1.5 flex items-center gap-2 text-xs font-bold uppercase tracking-wide text-marca-texto-suave">
-        {icone}
-        {rotulo}
-      </div>
+  if (!aberto) {
+    return (
+      <button
+        type="button"
+        onClick={() => setAberto(true)}
+        // aria-label existe para o teclado/leitor de tela do vendedor. Não
+        // aparece na tela, então não entrega nada ao cliente que está do lado.
+        aria-label="Mostrar indicador interno"
+        title="Indicador interno"
+        className="grid size-7 place-items-center rounded-lg text-marca-borda transition-colors hover:bg-slate-100 hover:text-marca-texto-suave"
+      >
+        <Eye aria-hidden="true" className="size-4" />
+      </button>
+    );
+  }
 
-      {aberto ? (
-        <>
-          <p className="text-2xl font-extrabold tabular-nums text-marca-laranja">{valor}</p>
-          {nota ? <p className="mt-1 text-xs text-marca-texto-suave">{nota}</p> : null}
-          <button
-            type="button"
-            onClick={() => setAberto(false)}
-            className="mt-2 inline-flex items-center gap-1 text-xs font-bold text-marca-texto-suave hover:text-marca-texto"
-          >
-            <EyeOff aria-hidden="true" className="size-3.5" />
-            Ocultar
-          </button>
-        </>
-      ) : (
-        <button
-          type="button"
-          onClick={() => setAberto(true)}
-          aria-expanded={false}
-          className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border-2 border-dashed border-marca-borda px-3 py-1.5 text-sm font-bold text-marca-texto-suave transition-colors hover:border-marca-azul-claro hover:bg-marca-azul-suave hover:text-marca-azul"
-        >
-          <Eye aria-hidden="true" className="size-4" />
-          Mostrar
-        </button>
-      )}
+  return (
+    <div className="flex items-center gap-2 rounded-lg border border-marca-borda bg-slate-50 px-2.5 py-1.5">
+      <span className="text-xs font-bold uppercase tracking-wide text-marca-texto-suave">
+        Economia efetiva
+      </span>
+      <span className="text-sm font-extrabold tabular-nums text-marca-texto">
+        {formatarPercentual(r.economiaPercentualEfetiva)}
+      </span>
+      <button
+        type="button"
+        onClick={() => setAberto(false)}
+        aria-label="Ocultar indicador interno"
+        className="grid size-6 place-items-center rounded text-marca-texto-suave hover:bg-slate-200"
+      >
+        <EyeOff aria-hidden="true" className="size-3.5" />
+      </button>
     </div>
   );
 }
@@ -323,15 +319,12 @@ export function EtapaResultado({
           icone={<Receipt aria-hidden="true" className="size-4" />}
           tom="verde"
         />
-        {/* Economia efetiva vem RECOLHIDA: é a métrica menos favorável (dilui a
-            economia no total da fatura, incluindo taxa mínima e impostos). O
-            vendedor mostra quando fizer sentido na conversa. */}
-        <CardRecolhivel
-          rotulo="Economia efetiva"
-          valor={formatarPercentual(r.economiaPercentualEfetiva)}
-          icone={<TrendingDown aria-hidden="true" className="size-4" />}
-          nota="Sobre o total da fatura, incluindo taxa mínima e impostos"
-        />
+      </div>
+
+      {/* A economia efetiva NÃO tem card. Fica atrás deste ícone mudo — ver
+          `EconomiaEfetivaOculta`. Alinhado à direita, discreto, sem legenda. */}
+      <div className="flex justify-end">
+        <EconomiaEfetivaOculta r={r} />
       </div>
 
       <div className="grid gap-4 lg:grid-cols-2">
@@ -413,6 +406,9 @@ export function EtapaResultado({
             </caption>
             <thead>
               <tr className="border-b border-marca-borda text-left">
+                {/* A coluna "% efetivo" saiu: é a MESMA métrica que fica atrás do
+                    ícone discreto. Deixá-la aqui anulava o esconderijo — o
+                    cliente lia o número na tabela. */}
                 {[
                   "Unidade",
                   "Compensável",
@@ -426,7 +422,6 @@ export function EtapaResultado({
                   "Fatura atual",
                   "Fatura Em Conta",
                   "Economia",
-                  "% efetivo",
                 ].map((h) => (
                   <th
                     key={h}
@@ -487,9 +482,6 @@ export function EtapaResultado({
                   </td>
                   <td className="whitespace-nowrap px-2 py-2 font-semibold tabular-nums text-marca-verde-escuro">
                     {formatarMoeda(u.economia)}
-                  </td>
-                  <td className="whitespace-nowrap px-2 py-2 tabular-nums">
-                    {formatarPercentual(u.economiaPercentualEfetiva)}
                   </td>
                 </tr>
               ))}

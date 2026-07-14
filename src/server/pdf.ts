@@ -25,10 +25,29 @@ import type { DadosCliente, ResultadoSimulacao } from "@/domain/simulator/types"
 
 const PASTA_IMG = path.join(process.cwd(), "public", "img");
 
-/** Lê um PNG do disco e devolve como data URI. */
+/** Erro de infraestrutura do PDF — a mensagem diz o que faltou, não "erro interno". */
+export class ErroGeracaoPdf extends Error {
+  readonly status = 500;
+}
+
+/**
+ * Lê um PNG do disco e devolve como data URI.
+ *
+ * Se o arquivo não estiver lá (o caso clássico: a função serverless não levou a
+ * pasta `public/img`), o erro precisa DIZER isso. Antes virava um ENOENT cru e a
+ * tela mostrava "Erro interno", que não ajuda ninguém a consertar.
+ * Ver `outputFileTracingIncludes` em next.config.ts.
+ */
 async function dataUri(arquivo: string): Promise<string> {
-  const bytes = await readFile(path.join(PASTA_IMG, arquivo));
-  return `data:image/png;base64,${bytes.toString("base64")}`;
+  try {
+    const bytes = await readFile(path.join(PASTA_IMG, arquivo));
+    return `data:image/png;base64,${bytes.toString("base64")}`;
+  } catch {
+    throw new ErroGeracaoPdf(
+      `A imagem "${arquivo}" não foi encontrada no servidor (${PASTA_IMG}). ` +
+        "Confira o empacotamento de public/img na função de PDF.",
+    );
+  }
 }
 
 let assetsCache: AssetsProposta | null = null;
@@ -113,15 +132,25 @@ async function abrirNavegador(): Promise<Browser> {
   if (explicito) return abrirComExecutavel(explicito);
 
   if (process.env.AWS_LAMBDA_FUNCTION_VERSION ?? process.env.VERCEL) {
-    const [{ default: chromium }, { default: puppeteerCore }] = await Promise.all([
-      import("@sparticuz/chromium"),
-      import("puppeteer-core"),
-    ]);
-    return (await puppeteerCore.launch({
-      args: chromium.args,
-      executablePath: await chromium.executablePath(),
-      headless: true,
-    })) as unknown as Browser;
+    try {
+      const [{ default: chromium }, { default: puppeteerCore }] = await Promise.all([
+        import("@sparticuz/chromium"),
+        import("puppeteer-core"),
+      ]);
+
+      // `chromium.args` já traz o que o binário do Lambda precisa (--no-sandbox,
+      // --single-process etc.). Só acrescentamos o que é nosso.
+      return (await puppeteerCore.launch({
+        args: [...chromium.args, "--font-render-hinting=none"],
+        executablePath: await chromium.executablePath(),
+        headless: true,
+      })) as unknown as Browser;
+    } catch (erro) {
+      throw new ErroGeracaoPdf(
+        "Não foi possível iniciar o navegador que gera o PDF neste ambiente. " +
+          (erro instanceof Error ? erro.message : ""),
+      );
+    }
   }
 
   try {
@@ -129,7 +158,13 @@ async function abrirNavegador(): Promise<Browser> {
     return await puppeteer.launch({ headless: true, args: ARGS_CHROME });
   } catch (erro) {
     const doSistema = await navegadorDoSistema();
-    if (!doSistema) throw erro;
+    if (!doSistema) {
+      throw new ErroGeracaoPdf(
+        "Nenhum Chrome/Chromium disponível para gerar o PDF. " +
+          "Instale o Chrome ou defina PUPPETEER_EXECUTABLE_PATH. " +
+          (erro instanceof Error ? erro.message : ""),
+      );
+    }
     return abrirComExecutavel(doSistema);
   }
 }

@@ -12,9 +12,18 @@ import { NextResponse } from "next/server";
 import { ZodError } from "zod";
 
 import { ErroNaoAutorizado, ErroProibido } from "@/server/auth";
+import { ErroGeracaoPdf } from "@/server/pdf";
 import { ErroDeNegocio } from "@/server/usuarios";
 
 export function responderErro(erro: unknown): NextResponse {
+  // Falha de infraestrutura do PDF: a mensagem DIZ o que faltou. Um "erro
+  // interno" genérico aqui deixaria o problema indiagnosticável para quem
+  // opera o sistema.
+  if (erro instanceof ErroGeracaoPdf) {
+    console.error("Falha ao gerar o PDF:", erro.message);
+    return NextResponse.json({ erro: erro.message }, { status: 500 });
+  }
+
   if (erro instanceof ZodError) {
     const problemas = erro.issues.map((i) => ({
       campo: i.path.join("."),

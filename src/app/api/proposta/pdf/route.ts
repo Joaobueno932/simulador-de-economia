@@ -116,22 +116,34 @@ export async function POST(request: Request) {
 
     // Histórico: guardamos entradas + config (não os bytes do PDF), para o
     // gestor poder reabrir a proposta exatamente como foi emitida.
-    const propostaId = await registrarProposta({
-      usuarioId: usuario.id,
-      vendedorId,
-      simulacao,
-      resultado,
-      configuracao: config,
-    });
+    //
+    // NÃO derruba a entrega do PDF. O vendedor está na frente do cliente: se o
+    // registro falhar (banco fora do ar, esquema desatualizado), ele ainda leva
+    // a proposta. O erro fica no log — perder uma linha de histórico é menos
+    // grave do que travar a venda.
+    try {
+      const propostaId = await registrarProposta({
+        usuarioId: usuario.id,
+        vendedorId,
+        simulacao,
+        resultado,
+        configuracao: config,
+      });
 
-    await registrarEvento({
-      usuarioId: usuario.id,
-      tipo: "proposta_gerada",
-      descricao:
-        `Gerou proposta para ${simulacao.cliente.nome} ` +
-        `(economia anual de ${formatarMoeda(resultado.economiaAnual)})`,
-      propostaId,
-    });
+      await registrarEvento({
+        usuarioId: usuario.id,
+        tipo: "proposta_gerada",
+        descricao:
+          `Gerou proposta para ${simulacao.cliente.nome} ` +
+          `(economia anual de ${formatarMoeda(resultado.economiaAnual)})`,
+        propostaId,
+      });
+    } catch (erro) {
+      console.error(
+        "PDF entregue, mas FALHOU ao registrar a proposta no histórico:",
+        erro instanceof Error ? erro.message : "desconhecido",
+      );
+    }
 
     const arquivo = nomeArquivoProposta(simulacao.cliente.nome, simulacao.cliente.dataProposta);
 
