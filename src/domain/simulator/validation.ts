@@ -132,15 +132,22 @@ export const unidadeConsumidoraSchema = z
 
 export const dadosClienteSchema = z.object({
   nome: z.string().trim().min(3, "Informe o nome do cliente ou da empresa."),
+  // CPF/CNPJ é OPCIONAL. Em branco passa; se preenchido, ainda precisa ser
+  // válido — evita gravar um documento digitado pela metade.
   documento: z
     .string()
     .transform(apenasDigitos)
-    .refine((d) => d.length > 0, "Informe o CPF ou CNPJ.")
-    .refine(isDocumentoValido, "CPF ou CNPJ inválido."),
+    .refine((d) => d.length === 0 || isDocumentoValido(d), "CPF ou CNPJ inválido.")
+    .default(""),
+  // Telefone também é OPCIONAL, com a mesma regra: vazio ou válido.
   telefone: z
     .string()
     .transform(apenasDigitos)
-    .refine((d) => d.length >= 10 && d.length <= 11, "Telefone inválido. Use DDD + número."),
+    .refine(
+      (d) => d.length === 0 || (d.length >= 10 && d.length <= 11),
+      "Telefone inválido. Use DDD + número.",
+    )
+    .default(""),
   email: z
     .union([z.literal(""), z.string().email("E-mail inválido.")])
     .default(""),

@@ -91,7 +91,7 @@ export function EtapaCliente({
         />
 
         <Campo
-          label="CPF ou CNPJ"
+          label="CPF ou CNPJ (opcional)"
           value={formatarDocumento(cliente.documento)}
           onChange={(e) => onChange({ documento: e.target.value.replace(/\D/g, "").slice(0, 14) })}
           onBlur={() => marcarTocado("documento")}
@@ -102,7 +102,7 @@ export function EtapaCliente({
         />
 
         <Campo
-          label="Telefone"
+          label="Telefone (opcional)"
           value={formatarTelefone(cliente.telefone)}
           onChange={(e) => onChange({ telefone: e.target.value.replace(/\D/g, "").slice(0, 11) })}
           onBlur={() => marcarTocado("telefone")}

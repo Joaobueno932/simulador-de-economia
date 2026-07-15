@@ -18,6 +18,7 @@ import {
 } from "./format";
 import { validarConfiguracao } from "./configSchema";
 import {
+  dadosClienteSchema,
   isDocumentoValido,
   MAX_UNIDADES,
   simulacaoArmazenadaSchema,
@@ -574,6 +575,45 @@ describe("validação", () => {
     expect(isDocumentoValido("11.222.333/0001-81")).toBe(true);
     expect(isDocumentoValido("11.222.333/0001-82")).toBe(false);
     expect(isDocumentoValido("123")).toBe(false);
+  });
+
+  it("CPF/CNPJ e telefone são OPCIONAIS (podem ficar em branco)", () => {
+    const semContato = dadosClienteSchema.safeParse({
+      nome: "CLIENTE EXEMPLO",
+      documento: "",
+      telefone: "",
+      email: "",
+      consultor: "CONSULTOR EXEMPLO",
+      dataProposta: "2026-07-10",
+      validadeDias: 30,
+    });
+    expect(semContato.success).toBe(true);
+  });
+
+  it("mas se PREENCHIDOS, continuam sendo validados", () => {
+    const base = {
+      nome: "CLIENTE EXEMPLO",
+      email: "",
+      consultor: "CONSULTOR EXEMPLO",
+      dataProposta: "2026-07-10",
+      validadeDias: 30,
+    };
+    // documento pela metade / inválido -> recusado
+    expect(
+      dadosClienteSchema.safeParse({ ...base, documento: "123", telefone: "" }).success,
+    ).toBe(false);
+    // telefone curto -> recusado
+    expect(
+      dadosClienteSchema.safeParse({ ...base, documento: "", telefone: "6799" }).success,
+    ).toBe(false);
+    // ambos válidos -> aceito
+    expect(
+      dadosClienteSchema.safeParse({
+        ...base,
+        documento: "529.982.247-25",
+        telefone: "(67) 99999-9999",
+      }).success,
+    ).toBe(true);
   });
 
   it(`exige ao menos uma UC e no máximo ${MAX_UNIDADES}`, () => {
