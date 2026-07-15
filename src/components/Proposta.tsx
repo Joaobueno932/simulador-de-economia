@@ -49,6 +49,9 @@ const AZUL = "#0F579F";
 const AZUL_ESCURO = "#0A3D70";
 const VERDE = "#3AAA35";
 const VERDE_CLARO = "#95C11F";
+// Laranja da badge "Associação" da logo Em Conta — amostrado do próprio
+// arquivo (logo-em-conta.png). Não é um laranja qualquer: é o da marca.
+const LARANJA_MARCA = "#EE791D";
 const TEXTO = "#1C2B3A";
 const CINZA = "#6B7A89";
 const BORDA = "#D7E1EB";
@@ -625,25 +628,28 @@ export function Proposta({
               style={{
                 fontSize: "17pt",
                 fontWeight: 800,
-                color: AZUL,
+                color: LARANJA_MARCA,
                 letterSpacing: "-0.01em",
               }}
             >
               DESCONTO {formatarDesconto(r.descontoMedio)}
             </div>
-            <div style={{ fontSize: "6pt", fontWeight: 700, color: AZUL, marginTop: "0.6mm" }}>
+            <div
+              style={{ fontSize: "6pt", fontWeight: 700, color: LARANJA_MARCA, marginTop: "0.6mm" }}
+            >
               sobre a tarifa do consumo compensável
             </div>
           </div>
         </div>
 
-        {/* Você vai economizar R$ X por ano */}
+        {/* Você vai economizar R$ X por ano — centralizado (antes ficava
+            justificado até as bordas, com um vão estranho no meio). */}
         <div
           style={{
             display: "flex",
             alignItems: "baseline",
-            justifyContent: "space-between",
-            gap: "3mm",
+            justifyContent: "center",
+            gap: "4mm",
             marginTop: "3mm",
           }}
         >
