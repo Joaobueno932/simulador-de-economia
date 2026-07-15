@@ -68,6 +68,15 @@ const DIST_PESSEGO = "#EFA96C";
 const DIST_TURQUESA = "#2BA6C6";
 const DIST_GRAFITE = "#3C3C3B";
 
+/**
+ * Cor da distribuidora NO GRÁFICO de barras por unidade.
+ *
+ * É o laranja do topo do card "ENERGISA MS" (o mesmo `DIST_PESSEGO`), não o
+ * turquesa que era usado antes — para o cliente associar a barra à conta da
+ * Energisa que ele já conhece.
+ */
+const DIST_GRAFICO = DIST_PESSEGO;
+
 const FONTE =
   '"Segoe UI", "Helvetica Neue", Arial, "Liberation Sans", system-ui, sans-serif';
 
@@ -338,7 +347,7 @@ function BarraUC({
             background: "#EDF1F5",
           }}
         >
-          <span style={{ width: `${pct(residual)}%`, background: DIST_TURQUESA, display: "block" }} />
+          <span style={{ width: `${pct(residual)}%`, background: DIST_GRAFICO, display: "block" }} />
           <span style={{ width: `${pct(locacao)}%`, background: VERDE, display: "block" }} />
           <span
             style={{
@@ -424,7 +433,7 @@ function BarraUC({
           style={{
             flex: 1,
             height: altura,
-            background: DIST_TURQUESA,
+            background: DIST_GRAFICO,
             borderRadius: "1mm",
             display: "block",
           }}
@@ -468,7 +477,7 @@ function BarraUC({
             background: "#EDF1F5",
           }}
         >
-          <span style={{ width: `${pct(residual)}%`, background: DIST_TURQUESA, display: "block" }} />
+          <span style={{ width: `${pct(residual)}%`, background: DIST_GRAFICO, display: "block" }} />
           <span style={{ width: `${pct(locacao)}%`, background: VERDE, display: "block" }} />
           {/* A fatia poupada aparece hachurada/clara: é o que ele NÃO paga mais. */}
           <span
@@ -906,7 +915,7 @@ export function Proposta({
                 : "Sua economia na prática"}
             </div>
             <div style={{ fontSize: "5.6pt", color: CINZA, marginBottom: "2.5mm" }}>
-              <span style={{ color: DIST_TURQUESA, fontWeight: 700 }}>■</span>{" "}
+              <span style={{ color: DIST_GRAFICO, fontWeight: 700 }}>■</span>{" "}
               {config.institucional.distribuidora} &nbsp;
               <span style={{ color: VERDE, fontWeight: 700 }}>■</span> Em Conta &nbsp;
               <span style={{ color: "#B7DFB4", fontWeight: 700 }}>■</span> o que você deixa de
