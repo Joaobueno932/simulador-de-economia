@@ -20,5 +20,11 @@ export default async function PreviewPage() {
 
   const config = await carregarConfiguracao();
 
-  return <PreviewProposta config={config} consultorPadrao={sessao.usuario.nome} />;
+  return (
+    <PreviewProposta
+      config={config}
+      consultorPadrao={sessao.usuario.nome}
+      usuarioId={sessao.usuario.id}
+    />
+  );
 }

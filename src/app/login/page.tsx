@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { Suspense, useState } from "react";
 
 import { Botao, Campo, Mascote } from "@/components/ui";
+import { limparRascunhos } from "@/components/useSimulacao";
 
 function Formulario() {
   const router = useRouter();
@@ -33,6 +34,11 @@ function Formulario() {
         setErro(dados?.erro ?? "Não foi possível entrar.");
         return;
       }
+
+      // Todo login começa com a simulação em branco: um rascunho deixado por
+      // outro atendimento (ou por outra pessoa nesta máquina) não pode
+      // reaparecer e ser confundido com o cliente atual.
+      limparRascunhos();
 
       // `replace` para o login não ficar no histórico do navegador.
       router.replace(destino.startsWith("/") ? destino : "/");

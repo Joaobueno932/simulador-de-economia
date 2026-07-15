@@ -201,3 +201,28 @@ CREATE TABLE IF NOT EXISTS eventos (
 CREATE INDEX IF NOT EXISTS eventos_usuario ON eventos (usuario_id, criado_em DESC);
 CREATE INDEX IF NOT EXISTS eventos_data ON eventos (criado_em DESC);
 CREATE INDEX IF NOT EXISTS eventos_tipo ON eventos (tipo, criado_em DESC);
+
+-- ---------------------------------------------------------------------------
+-- Simulações salvas ("Meus clientes").
+--
+-- Diferente de `propostas`: proposta é o registro imutável de um PDF emitido;
+-- isto aqui é um RASCUNHO editável, gravado assim que o consultor chega à etapa
+-- 2, para ele reabrir e continuar o atendimento do cliente depois.
+--
+-- Guardamos a simulação inteira (cliente + unidades) em JSONB. O consultor que
+-- criou é o dono; um vendedor só vê as suas.
+--
+-- ON DELETE CASCADE: são rascunhos de trabalho, saem junto com a conta do dono.
+-- ---------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS simulacoes (
+  id                BIGSERIAL PRIMARY KEY,
+  usuario_id        BIGINT      NOT NULL REFERENCES usuarios (id) ON DELETE CASCADE,
+  cliente_nome      TEXT        NOT NULL DEFAULT '',
+  cliente_documento TEXT        NOT NULL DEFAULT '',
+  quantidade_ucs    INTEGER     NOT NULL DEFAULT 1,
+  dados             JSONB       NOT NULL,
+  criada_em         TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  atualizada_em     TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+CREATE INDEX IF NOT EXISTS simulacoes_usuario ON simulacoes (usuario_id, atualizada_em DESC);

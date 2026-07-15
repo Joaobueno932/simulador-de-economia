@@ -17,10 +17,11 @@ import {
   RotateCcw,
   Settings,
   Sun,
+  Users,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import { Avatar } from "@/components/Avatar";
 import { EtapaCliente, type VendedorOpcao } from "@/components/EtapaCliente";
@@ -28,7 +29,7 @@ import { EtapaResultado } from "@/components/EtapaResultado";
 import { EtapaUnidades } from "@/components/EtapaUnidades";
 import { ModalSenhaDesconto } from "@/components/ModalSenhaDesconto";
 import { Botao, Mascote } from "@/components/ui";
-import { useSimulacao } from "@/components/useSimulacao";
+import { limparRascunhos, useSimulacao } from "@/components/useSimulacao";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 import { formatarDesconto, formatarKwh, formatarMoeda } from "@/domain/simulator/format";
 import { dadosClienteSchema, simulacaoSchema } from "@/domain/simulator/validation";
@@ -72,7 +73,8 @@ export function Simulador({
     duplicarUC,
     removerUC,
     limpar,
-  } = useSimulacao(config, consultorInicial);
+    substituir,
+  } = useSimulacao(config, consultorInicial, usuario.id);
 
   const [etapa, setEtapa] = useState<1 | 2 | 3>(1);
   const [tentouAvancar, setTentouAvancar] = useState(false);
@@ -81,13 +83,66 @@ export function Simulador({
   const [modalSenha, setModalSenha] = useState(false);
   const [liberado, setLiberado] = useState(descontoJaLiberado);
 
+  // Id do cliente salvo em que estamos trabalhando. Assim os salvamentos
+  // seguintes ATUALIZAM a mesma linha, em vez de criar um cliente por etapa.
+  const clienteSalvoId = useRef<number | null>(null);
+
   // Admin/gestor editam direto; vendedor precisa da senha de uso único.
   const descontoEditavel = podeEditarDescontoLivremente(usuario.papel) || liberado;
 
+  /**
+   * Reabre um cliente salvo quando a URL traz `?cliente=ID` (vindo da aba
+   * Clientes). Carrega a simulação e cai na etapa 2, onde o atendimento
+   * continua. A URL é limpa em seguida, para um F5 não recarregar de novo.
+   */
+  useEffect(() => {
+    const id = new URLSearchParams(window.location.search).get("cliente");
+    if (!id) return;
+    let cancelado = false;
+    (async () => {
+      try {
+        const r = await fetch(`/api/simulacoes/${id}`);
+        if (!r.ok || cancelado) return;
+        const { simulacao: s } = (await r.json()) as { simulacao: import("@/domain/simulator/types").Simulacao };
+        substituir(s);
+        clienteSalvoId.current = Number(id);
+        setEtapa(2);
+      } finally {
+        window.history.replaceState({}, "", "/");
+      }
+    })();
+    return () => {
+      cancelado = true;
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   async function sair() {
     await fetch("/api/auth/logout", { method: "POST" });
+    // Ao sair, some com o rascunho: quem entrar depois começa do zero.
+    limparRascunhos();
     router.replace("/login");
     router.refresh();
+  }
+
+  /**
+   * Salva o cliente na aba "Meus clientes". Fire-and-forget: um erro aqui não
+   * pode travar a navegação nem o atendimento — o rascunho local segue de pé.
+   */
+  async function salvarCliente() {
+    try {
+      const r = await fetch("/api/simulacoes", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: clienteSalvoId.current, simulacao }),
+      });
+      if (r.ok) {
+        const { id } = (await r.json()) as { id: number };
+        clienteSalvoId.current = id;
+      }
+    } catch {
+      // silencioso de propósito — ver comentário acima
+    }
   }
 
   const clienteValido = dadosClienteSchema.safeParse(simulacao.cliente).success;
@@ -102,12 +157,24 @@ export function Simulador({
     }
     setTentouAvancar(false);
     setEtapa((e) => (e === 1 ? 2 : 3));
+    // "assim que o usuário for para a etapa 2, já deve ser salvo": grava ao
+    // avançar (1→2 e 2→3), capturando o que foi preenchido até aqui.
+    void salvarCliente();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
   function voltar() {
     setTentouAvancar(false);
     setEtapa((e) => (e === 3 ? 2 : 1));
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  }
+
+  /** Começa uma simulação do zero — e desvincula do cliente salvo anterior. */
+  function novaSimulacao() {
+    clienteSalvoId.current = null;
+    setEtapa(1);
+    setTentouAvancar(false);
+    limpar();
     window.scrollTo({ top: 0, behavior: "smooth" });
   }
 
@@ -237,6 +304,16 @@ export function Simulador({
               </span>
             </Link>
 
+            {/* Aba de clientes salvos — o vendedor reabre o que já preencheu. */}
+            <Link
+              href="/clientes"
+              className="inline-flex min-h-11 items-center gap-2 rounded-xl border-2 border-marca-borda px-3.5 py-2 text-sm font-bold text-marca-texto transition-colors hover:border-marca-azul-claro hover:bg-marca-azul-suave"
+              title="Meus clientes"
+            >
+              <Users aria-hidden="true" className="size-4" />
+              <span className="hidden sm:inline">Clientes</span>
+            </Link>
+
             {podeAdministrar(usuario.papel) ? (
               <Link
                 href="/admin"
@@ -247,7 +324,7 @@ export function Simulador({
               </Link>
             ) : null}
 
-            <Botao variante="sutil" onClick={limpar} title="Recomeçar a simulação">
+            <Botao variante="sutil" onClick={novaSimulacao} title="Recomeçar a simulação">
               <RotateCcw aria-hidden="true" className="size-4" />
               <span className="sr-only">Limpar simulação</span>
             </Botao>

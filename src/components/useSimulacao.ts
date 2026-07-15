@@ -22,7 +22,35 @@ import type {
   UnidadeConsumidora,
 } from "@/domain/simulator/types";
 
-const CHAVE_RASCUNHO = "em-conta:simulacao:v2";
+/**
+ * Prefixo de TODA chave de rascunho no navegador.
+ *
+ * A chave real inclui o id do usuário (`...:v3:<id>`): o rascunho de um
+ * atendimento nunca aparece para outra pessoa que use a mesma máquina.
+ */
+export const PREFIXO_RASCUNHO = "em-conta:simulacao:";
+
+function chaveRascunho(usuarioId: number): string {
+  return `${PREFIXO_RASCUNHO}v3:${usuarioId}`;
+}
+
+/**
+ * Apaga TODOS os rascunhos guardados no navegador.
+ *
+ * Chamado no login e no logout: ao entrar (de novo, ou como outra pessoa) a
+ * simulação começa do zero. Isso evita o vendedor achar que já preencheu um
+ * campo quando o dado é do cliente anterior.
+ */
+export function limparRascunhos(): void {
+  if (typeof window === "undefined") return;
+  try {
+    for (const chave of Object.keys(window.localStorage)) {
+      if (chave.startsWith(PREFIXO_RASCUNHO)) window.localStorage.removeItem(chave);
+    }
+  } catch {
+    // Modo privado / cota: o rascunho é um conforto, não um requisito.
+  }
+}
 
 /**
  * Máximo de unidades consumidoras. Vem do domínio (`MAX_UNIDADES`), que é o
@@ -71,10 +99,10 @@ function estadoInicial({ consultor, config }: Inicial): Simulacao {
 }
 
 /** Aceita apenas rascunhos com o formato esperado — nunca confia no localStorage. */
-function lerRascunho(): Simulacao | null {
+function lerRascunho(chave: string): Simulacao | null {
   if (typeof window === "undefined") return null;
   try {
-    const bruto = window.localStorage.getItem(CHAVE_RASCUNHO);
+    const bruto = window.localStorage.getItem(chave);
     if (!bruto) return null;
     const dados = JSON.parse(bruto) as Simulacao;
     if (!dados?.cliente || !Array.isArray(dados.unidades)) return null;
@@ -85,7 +113,34 @@ function lerRascunho(): Simulacao | null {
   }
 }
 
-export function useSimulacao(config: ConfiguracaoSimulador, consultorInicial: string) {
+/**
+ * Reimpõe data e validade em uma simulação carregada (rascunho ou cliente
+ * salvo): a proposta é sempre de hoje, com a validade atual da configuração —
+ * nunca a data de quando foi guardada.
+ */
+function comDataDeHoje(
+  s: Simulacao,
+  config: ConfiguracaoSimulador,
+  consultorInicial: string,
+): Simulacao {
+  return {
+    ...s,
+    cliente: {
+      ...s.cliente,
+      dataProposta: hojeISO(),
+      validadeDias: config.validadePropostaDias,
+      consultor: s.cliente.consultor || consultorInicial,
+    },
+  };
+}
+
+export function useSimulacao(
+  config: ConfiguracaoSimulador,
+  consultorInicial: string,
+  usuarioId: number,
+) {
+  const chave = chaveRascunho(usuarioId);
+
   const [simulacao, setSimulacao] = useState<Simulacao>(() =>
     estadoInicial({ consultor: consultorInicial, config }),
   );
@@ -94,20 +149,8 @@ export function useSimulacao(config: ConfiguracaoSimulador, consultorInicial: st
 
   // Restaura o rascunho depois da hidratação (o servidor não tem localStorage).
   useEffect(() => {
-    const salvo = lerRascunho();
-    if (salvo) {
-      // Data e validade são sempre reimpostas: um rascunho de ontem não pode
-      // ressuscitar a data de ontem nem uma validade antiga.
-      setSimulacao({
-        ...salvo,
-        cliente: {
-          ...salvo.cliente,
-          dataProposta: hojeISO(),
-          validadeDias: config.validadePropostaDias,
-          consultor: salvo.cliente.consultor || consultorInicial,
-        },
-      });
-    }
+    const salvo = lerRascunho(chave);
+    if (salvo) setSimulacao(comDataDeHoje(salvo, config, consultorInicial));
     setRascunhoCarregado(true);
     // Só na montagem: o rascunho é restaurado uma vez.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -121,11 +164,11 @@ export function useSimulacao(config: ConfiguracaoSimulador, consultorInicial: st
       return;
     }
     try {
-      window.localStorage.setItem(CHAVE_RASCUNHO, JSON.stringify(simulacao));
+      window.localStorage.setItem(chave, JSON.stringify(simulacao));
     } catch {
       // Modo privado / cota cheia: o rascunho é um conforto, não um requisito.
     }
-  }, [simulacao, rascunhoCarregado]);
+  }, [simulacao, rascunhoCarregado, chave]);
 
   const atualizarCliente = useCallback((patch: Partial<DadosCliente>) => {
     setSimulacao((s) => ({ ...s, cliente: { ...s.cliente, ...patch } }));
@@ -173,11 +216,19 @@ export function useSimulacao(config: ConfiguracaoSimulador, consultorInicial: st
   const limpar = useCallback(() => {
     setSimulacao(estadoInicial({ consultor: consultorInicial, config }));
     try {
-      window.localStorage.removeItem(CHAVE_RASCUNHO);
+      window.localStorage.removeItem(chave);
     } catch {
       // ignorado — ver acima
     }
-  }, [config, consultorInicial]);
+  }, [config, consultorInicial, chave]);
+
+  /** Carrega uma simulação inteira (ex.: reabrir um cliente salvo). */
+  const substituir = useCallback(
+    (s: Simulacao) => {
+      setSimulacao(comDataDeHoje(s, config, consultorInicial));
+    },
+    [config, consultorInicial],
+  );
 
   // Recalcula a cada tecla: é o "tempo real" exigido, e é barato (funções puras).
   const resultado: ResultadoSimulacao = useMemo(
@@ -195,5 +246,6 @@ export function useSimulacao(config: ConfiguracaoSimulador, consultorInicial: st
     duplicarUC,
     removerUC,
     limpar,
+    substituir,
   };
 }

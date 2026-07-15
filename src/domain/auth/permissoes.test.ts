@@ -9,12 +9,14 @@ import {
   podeEditarDescontoLivremente,
   podeEmitirSenhaDesconto,
   podeEscolherConsultor,
+  podeExcluirCliente,
   podeExcluirProposta,
   podeGerenciarUsuario,
   podeResetarSenha,
   podeVerHistoricoDeTodos,
   podeVerInstituicoes,
   podeVerProposta,
+  podeVerTodosClientes,
   SENHA_PADRAO,
   usuarioParaCliente,
   type Papel,
@@ -162,6 +164,21 @@ describe("acesso a uma proposta emitida", () => {
 
   it("vendedor NÃO vê a proposta de outro vendedor", () => {
     expect(podeVerProposta(outroVendedor, { usuarioId: 4, vendedorId: 4 })).toBe(false);
+  });
+});
+
+describe("clientes salvos", () => {
+  it("só admin e gestor excluem um cliente salvo", () => {
+    // O vendedor reabre e continua os seus, mas não os apaga.
+    expect(podeExcluirCliente("admin")).toBe(true);
+    expect(podeExcluirCliente("gestor")).toBe(true);
+    expect(podeExcluirCliente("vendedor")).toBe(false);
+  });
+
+  it("só admin e gestor veem os clientes de todos; o vendedor vê só os seus", () => {
+    expect(podeVerTodosClientes("admin")).toBe(true);
+    expect(podeVerTodosClientes("gestor")).toBe(true);
+    expect(podeVerTodosClientes("vendedor")).toBe(false);
   });
 });
 

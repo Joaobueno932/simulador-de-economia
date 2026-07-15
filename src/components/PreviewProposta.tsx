@@ -18,11 +18,17 @@ import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
 export function PreviewProposta({
   config,
   consultorPadrao,
+  usuarioId,
 }: {
   config: ConfiguracaoSimulador;
   consultorPadrao: string;
+  usuarioId: number;
 }) {
-  const { simulacao, resultado, rascunhoCarregado } = useSimulacao(config, consultorPadrao);
+  const { simulacao, resultado, rascunhoCarregado } = useSimulacao(
+    config,
+    consultorPadrao,
+    usuarioId,
+  );
 
   if (!rascunhoCarregado) {
     return (

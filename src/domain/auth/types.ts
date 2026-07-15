@@ -101,6 +101,27 @@ export function podeExcluirProposta(papel: Papel): boolean {
 }
 
 /**
+ * Excluir um cliente salvo ("Meus clientes").
+ *
+ * SÓ admin e gestor. O vendedor reabre e continua os seus clientes, mas não os
+ * apaga — evita que ele suma com o próprio trabalho, e é o gestor quem faz a
+ * limpeza.
+ */
+export function podeExcluirCliente(papel: Papel): boolean {
+  return podeAdministrar(papel);
+}
+
+/**
+ * Ver os clientes salvos de TODOS (não só os próprios).
+ *
+ * Admin e gestor precisam disso para gerenciar/limpar; o vendedor vê apenas os
+ * seus.
+ */
+export function podeVerTodosClientes(papel: Papel): boolean {
+  return podeAdministrar(papel);
+}
+
+/**
  * Quais papéis cada um pode CRIAR.
  *
  * Gestor cria apenas vendedores — não pode se promover nem criar pares.
