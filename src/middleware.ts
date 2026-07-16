@@ -43,6 +43,13 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Tudo, menos estáticos e imagens.
-  matcher: ["/((?!_next/static|_next/image|img/|favicon.ico).*)"],
+  // Tudo, menos estáticos, imagens e os arquivos do PWA.
+  //
+  // O manifest e os ícones PRECISAM ser públicos: o tablet os busca sem cookie
+  // ao "Adicionar à tela inicial". Com eles atrás do login, o aparelho recebia
+  // a página de login no lugar do manifest — e caía no favicon de 48 px, o que
+  // deixava o ícone do PWA pixelado.
+  matcher: [
+    "/((?!_next/static|_next/image|img/|icones/|favicon.ico|apple-icon.png|manifest.webmanifest).*)",
+  ],
 };
