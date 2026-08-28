@@ -60,8 +60,11 @@ export function PreviewProposta({
         </button>
       </div>
 
+      {/* A proposta pode ter mais de uma folha (as unidades são paginadas). Cada
+          folha ganha sua própria sombra aqui; na impressão elas voltam a ser
+          páginas coladas, sem sombra e sem espaço entre elas. */}
       <div className="flex justify-center overflow-x-auto px-4">
-        <div className="shadow-lg print:shadow-none">
+        <div className="flex flex-col gap-6 [&>div]:shadow-lg print:gap-0 print:[&>div]:shadow-none">
           <Proposta cliente={simulacao.cliente} r={resultado} config={config} />
         </div>
       </div>

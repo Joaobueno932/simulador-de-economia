@@ -53,8 +53,11 @@ export function limparRascunhos(): void {
 }
 
 /**
- * Máximo de unidades consumidoras. Vem do domínio (`MAX_UNIDADES`), que é o
- * mesmo limite que o servidor impõe — a tela e a API não podem divergir.
+ * Teto técnico de unidades consumidoras. Vem do domínio (`MAX_UNIDADES`), que é
+ * o mesmo limite que o servidor impõe — a tela e a API não podem divergir.
+ *
+ * Não existe limite comercial: o vendedor adiciona quantas UCs o cliente tiver.
+ * Este número só existe para o navegador e o gerador de PDF não travarem.
  */
 export const MAX_UCS = MAX_UNIDADES;
 

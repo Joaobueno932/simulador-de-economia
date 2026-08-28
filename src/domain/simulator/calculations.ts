@@ -16,9 +16,12 @@ import {
   fatorProjecao,
   impostoDaTarifa,
   isMediaTensao,
+  tarifaBaixaTensao,
   tarifaComImposto,
+  tarifaDemandaComImposto,
 } from "./tariffs";
 import type {
+  Classificacao,
   CustosBandeiras,
   ProjecaoCincoAnos,
   ResultadoSimulacao,
@@ -54,13 +57,18 @@ export function calcularConsumoCompensavel(
  *
  * Sempre usa a tarifa de **baixa tensão com imposto**, mesmo o mínimo variando
  * com a ligação. Média tensão não tem faturamento mínimo nesta regra.
+ *
+ * A tarifa BT vem de `tarifaBaixaTensao(classificação)`: B4 tem a sua própria.
  */
 export function calcularFaturamentoMinimo(
   uc: UnidadeConsumidora,
   config: ConfiguracaoSimulador = CONFIG,
 ): number {
   if (isMediaTensao(uc.ligacao)) return 0;
-  return consumoMinimo(uc.ligacao, config) * tarifaComImposto(config.tarifas.baixaTensao, config);
+  return (
+    consumoMinimo(uc.ligacao, config) *
+    tarifaComImposto(tarifaBaixaTensao(uc.classificacao, config), config)
+  );
 }
 
 /**
@@ -71,25 +79,32 @@ export function calcularFaturamentoMinimo(
  * ATENÇÃO: a planilha usa `L3` (BT) mesmo quando a UC é média tensão. É
  * incoerente do ponto de vista tarifário, mas é o que produz os números da
  * planilha. Replicado deliberadamente. Ver DOCUMENTACAO-REGRAS-PLANILHA.md §3.
+ *
+ * A classificação entra porque B4 tem tarifa BT própria — e, portanto, um
+ * delta de imposto próprio.
  */
 export function calcularImpostos(
   consumoCompensavel: number,
+  classificacao: Classificacao,
   config: ConfiguracaoSimulador = CONFIG,
 ): number {
-  return consumoCompensavel * impostoDaTarifa(config.tarifas.baixaTensao, config);
+  return consumoCompensavel * impostoDaTarifa(tarifaBaixaTensao(classificacao, config), config);
 }
 
 /**
  * Custo de demanda — `Preencher!F13`.
  *
  * `IF(MÉDIA TENSÃO; F7 * K6; 0)`
+ *
+ * A tarifa de demanda usa `tarifaDemandaComImposto`, não `tarifaComImposto`:
+ * ela não tem PIS/COFINS próprio, usa `impostos.pisCofinsDemanda`.
  */
 export function calcularCustoDemanda(
   uc: UnidadeConsumidora,
   config: ConfiguracaoSimulador = CONFIG,
 ): number {
   if (!isMediaTensao(uc.ligacao)) return 0;
-  return uc.demandaContratada * tarifaComImposto(config.tarifas.demanda, config);
+  return uc.demandaContratada * tarifaDemandaComImposto(config);
 }
 
 /**
@@ -109,7 +124,8 @@ export function calcularCustoSemLocacao(
   const bruto = isMediaTensao(uc.ligacao)
     ? uc.consumoForaPonta * tarifaComImposto(config.tarifas.foraPonta, config) +
       uc.consumoPonta * tarifaComImposto(config.tarifas.ponta, config)
-    : consumoCompensavel * tarifaComImposto(config.tarifas.baixaTensao, config);
+    : consumoCompensavel *
+      tarifaComImposto(tarifaBaixaTensao(uc.classificacao, config), config);
 
   return bruto - impostos;
 }
@@ -142,7 +158,7 @@ export function calcularUC(
     : calcularCosip(uc.classificacao, uc.consumoForaPonta, config);
 
   const faturamentoMinimo = calcularFaturamentoMinimo(uc, config); // F10
-  const impostos = calcularImpostos(consumoCompensavel, config); // F11
+  const impostos = calcularImpostos(consumoCompensavel, uc.classificacao, config); // F11
   const custoDemanda = calcularCustoDemanda(uc, config); // F13
 
   // F15 = SUM(F9:F13)
@@ -164,7 +180,7 @@ export function calcularUC(
   let economiaConcorrenteAnual: number | null = null;
   let economiaVsConcorrenteAnual: number | null = null;
   if (uc.custoKwhConcorrente !== null) {
-    const tarifaBase = config.tarifas.baixaTensao.semImposto; // Dados!J3
+    const tarifaBase = tarifaBaixaTensao(uc.classificacao, config).semImposto; // Dados!J3
     economiaConcorrenteAnual =
       (tarifaBase - uc.custoKwhConcorrente) * consumoCompensavel * MESES_NO_ANO;
     economiaVsConcorrenteAnual = economia * MESES_NO_ANO - economiaConcorrenteAnual;

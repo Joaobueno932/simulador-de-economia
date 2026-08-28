@@ -9,7 +9,13 @@ import {
   calcularSimulacao,
   calcularUC,
 } from "./calculations";
-import { calcularCosip, fatorProjecao, tarifaComImposto } from "./tariffs";
+import {
+  calcularCosip,
+  fatorProjecao,
+  tarifaBaixaTensao,
+  tarifaComImposto,
+  tarifaDemandaComImposto,
+} from "./tariffs";
 import {
   formatarDesconto,
   formatarMoeda,
@@ -204,6 +210,10 @@ describe("COSIP — tabela da aba Dados", () => {
     ["B3", 5000, 300.83164857043164],
     ["B3", 5001, 362.22586256439723],
     ["MT", 800, 174.97350988280206],
+    // B4 usa a MESMA tabela da B3 — só a tarifa difere.
+    ["B4", 0, 3.07],
+    ["B4", 400, 138.13698148642268],
+    ["B4", 5001, 362.22586256439723],
   ])("%s com %i kWh -> COSIP %f", (classificacao, consumo, esperado) => {
     expect(calcularCosip(classificacao, consumo)).toBeCloseTo(esperado, 9);
   });
@@ -278,6 +288,73 @@ describe("faturamento mínimo", () => {
 });
 
 // ---------------------------------------------------------------------------
+// B4 — idêntica à B3, exceto pela tarifa de baixa tensão
+// ---------------------------------------------------------------------------
+describe("classificação B4", () => {
+  const tarifaB4 = tarifaComImposto(CONFIG.tarifas.baixaTensaoB4);
+
+  it("tem tarifa própria; as outras classificações usam a BT padrão", () => {
+    expect(tarifaBaixaTensao("B4").semImposto).toBe(0.7204);
+    for (const classificacao of ["B1", "B2", "B3", "MT"] as const) {
+      expect(tarifaBaixaTensao(classificacao)).toBe(CONFIG.tarifas.baixaTensao);
+    }
+  });
+
+  it("a tarifa B4 com imposto é 0,9564207242191909", () => {
+    expect(tarifaB4).toBeCloseTo(0.9564207242191909, 12);
+  });
+
+  it("o faturamento mínimo usa a tarifa da B4", () => {
+    expect(calcularFaturamentoMinimo(uc({ classificacao: "B4", ligacao: "TRIFASICO" }))).toBeCloseTo(
+      100 * tarifaB4,
+      9,
+    );
+  });
+
+  it("cobra a mesma COSIP da B3, mas custo e economia menores", () => {
+    const b3 = calcularUC(uc({ classificacao: "B3" }));
+    const b4 = calcularUC(uc({ classificacao: "B4" }));
+
+    expect(b4.cosip).toBe(b3.cosip);
+    expect(b4.consumoCompensavel).toBe(b3.consumoCompensavel);
+
+    // Tudo que passa pela tarifa cai na proporção 0,7204 / 0,9866.
+    const razao = 0.7204 / 0.9866;
+    expect(b4.custoSemLocacao).toBeCloseTo(b3.custoSemLocacao * razao, 9);
+    expect(b4.faturamentoMinimo).toBeCloseTo(b3.faturamentoMinimo * razao, 9);
+    expect(b4.impostos).toBeCloseTo(b3.impostos * razao, 9);
+    expect(b4.economia).toBeCloseTo(b3.economia * razao, 9);
+  });
+
+  it("custo sem locação = compensável × tarifa B4 c/ imposto − impostos", () => {
+    const r = calcularUC(uc({ classificacao: "B4", ligacao: "TRIFASICO", consumoForaPonta: 218 }));
+    expect(r.custoSemLocacao).toBeCloseTo(118 * tarifaB4 - r.impostos, 9);
+  });
+
+  it("a economia contra o concorrente parte da tarifa B4 sem imposto", () => {
+    const r = calcularUC(
+      uc({ classificacao: "B4", ligacao: "TRIFASICO", custoKwhConcorrente: 0.7 }),
+    );
+    expect(r.economiaConcorrenteAnual).toBeCloseTo((0.7204 - 0.7) * 118 * 12, 9);
+  });
+
+  it("é aceita pela validação em baixa tensão e recusada em média tensão", () => {
+    expect(unidadeConsumidoraSchema.safeParse(uc({ classificacao: "B4" })).success).toBe(true);
+    expect(
+      unidadeConsumidoraSchema.safeParse(
+        uc({ classificacao: "B4", ligacao: "MEDIA_TENSAO" }),
+      ).success,
+    ).toBe(false);
+  });
+
+  it("config antiga (sem a tarifa B4) continua válida e ganha o padrão", () => {
+    const antiga = JSON.parse(JSON.stringify(CONFIG));
+    delete antiga.tarifas.baixaTensaoB4;
+    expect(validarConfiguracao(antiga).tarifas.baixaTensaoB4.semImposto).toBe(0.7204);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Compensável zero: economia zero, mas fatura mínima continua sendo cobrada
 // ---------------------------------------------------------------------------
 describe("consumo compensável zero", () => {
@@ -323,9 +400,27 @@ describe("média tensão", () => {
   const r = calcularUC(u);
 
   it("custo de demanda = demanda × tarifa de demanda c/ imposto", () => {
-    const tarifaDemanda = tarifaComImposto(CONFIG.tarifas.demanda);
+    const tarifaDemanda = tarifaDemandaComImposto();
     expect(tarifaDemanda).toBeCloseTo(45.911927095092459, 9);
     expect(r.custoDemanda).toBeCloseTo(100 * tarifaDemanda, 9);
+  });
+
+  it("a tarifa de demanda usa impostos.pisCofinsDemanda, não um campo próprio", () => {
+    // Prova por observação: mudar SÓ pisCofinsDemanda muda o resultado.
+    // A tarifa de demanda (config.ts) não tem mais campo `pisCofins` — o
+    // TypeScript já impediria compilar um valor ali; isto prova em runtime que
+    // é `impostos.pisCofinsDemanda` quem entra na conta.
+    const configAlterada = {
+      ...CONFIG,
+      impostos: { ...CONFIG.impostos, pisCofinsDemanda: 0.089805 },
+    };
+    const comPadrao = tarifaDemandaComImposto(CONFIG);
+    const comAlterado = tarifaDemandaComImposto(configAlterada);
+    expect(comAlterado).not.toBeCloseTo(comPadrao, 2);
+    expect(comAlterado).toBeCloseTo(
+      CONFIG.tarifas.demanda.semImposto / (1 - CONFIG.impostos.icms) / (1 - 0.089805),
+      9,
+    );
   });
 
   it("custo sem locação usa as tarifas de fora ponta e ponta", () => {
@@ -616,7 +711,7 @@ describe("validação", () => {
     ).toBe(true);
   });
 
-  it(`exige ao menos uma UC e no máximo ${MAX_UNIDADES}`, () => {
+  it(`exige ao menos uma UC e aceita até o teto técnico de ${MAX_UNIDADES}`, () => {
     expect(simulacaoSchema.safeParse(simulacao([])).success).toBe(false);
 
     const acima = Array.from({ length: MAX_UNIDADES + 1 }, (_, i) => uc({ id: `uc-${i}` }));
@@ -626,12 +721,18 @@ describe("validação", () => {
     expect(simulacaoSchema.safeParse(simulacao(noLimite)).success).toBe(true);
   });
 
+  it("não existe limite comercial de UCs — muito acima das 3 antigas passa", () => {
+    // O teto de 3 UCs por cliente foi removido: a proposta pagina as unidades.
+    const muitas = Array.from({ length: 12 }, (_, i) => uc({ id: `uc-${i}` }));
+    expect(simulacaoSchema.safeParse(simulacao(muitas)).success).toBe(true);
+  });
+
   it("uma proposta JÁ GRAVADA com mais UCs que o limite atual continua válida", () => {
     // Baixar o limite não pode invalidar o passado: o gestor precisa conseguir
     // reabrir o PDF de uma proposta antiga.
-    const muitas = Array.from({ length: 10 }, (_, i) => uc({ id: `uc-${i}` }));
-    expect(simulacaoSchema.safeParse(simulacao(muitas)).success).toBe(false);
-    expect(simulacaoArmazenadaSchema.safeParse(simulacao(muitas)).success).toBe(true);
+    const acimaDoTeto = Array.from({ length: MAX_UNIDADES + 1 }, (_, i) => uc({ id: `uc-${i}` }));
+    expect(simulacaoSchema.safeParse(simulacao(acimaDoTeto)).success).toBe(false);
+    expect(simulacaoArmazenadaSchema.safeParse(simulacao(acimaDoTeto)).success).toBe(true);
   });
 
   it("aceita a simulação de regressão inteira", () => {

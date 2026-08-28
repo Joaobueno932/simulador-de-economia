@@ -26,6 +26,14 @@ const tarifaSchema = z.object({
   pisCofins: fracao("O PIS/COFINS"),
 });
 
+/**
+ * A tarifa de demanda não tem `pisCofins` próprio — usa `impostos.pisCofinsDemanda`
+ * (ver `TarifaDemanda` em `config.ts`).
+ */
+const tarifaDemandaSchema = z.object({
+  semImposto: positivo("A tarifa de demanda"),
+});
+
 const faixaCosipSchema = z.object({
   minimo: positivo("O mínimo da faixa"),
   maximo: positivo("O máximo da faixa"),
@@ -60,9 +68,14 @@ export const configuracaoSchema = z.object({
 
   tarifas: z.object({
     baixaTensao: tarifaSchema,
+    // `.default()`: configs e propostas gravadas antes da criação da B4 não
+    // têm este campo. Sem o padrão, ler uma linha antiga jogaria TODA a config
+    // salva fora (`carregarConfiguracao` cai no padrão da planilha) e quebraria
+    // a releitura de propostas antigas.
+    baixaTensaoB4: tarifaSchema.default(CONFIG.tarifas.baixaTensaoB4),
     foraPonta: tarifaSchema,
     ponta: tarifaSchema,
-    demanda: tarifaSchema,
+    demanda: tarifaDemandaSchema,
   }),
 
   bandeiras: z.object({

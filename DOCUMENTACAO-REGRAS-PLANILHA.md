@@ -21,6 +21,7 @@ A tarifa "com imposto" é obtida com **gross-up**: `tarifa / (1 - ICMS) / (1 - P
 | Tarifa | s/ imposto (J) | Fórmula da coluna K | c/ imposto (K) | Impostos (L = K - J) |
 |---|---|---|---|---|
 | Baixa Tensão | 0,98660 | `J3/(1-17%)/(1-SUM(N3:O3))` | **1,309834378837665** | **0,32323437883766493** |
+| Baixa Tensão — B4 | 0,72040 | mesmo gross-up da BT (ICMS 17% + 9,25%) | **0,9564207242191909** | **0,2360207242191909** |
 | Fora Ponta | 0,48504 | `J4/(1-17%)/(1-SUM(N4:O4))` | 0,58438554216867478 | 0,09934554216867475 |
 | Ponta | 2,38151 | `J5/(1-17%)/(1-SUM(N5:O5))` | 2,8692891566265062 | 0,48777915662650617 |
 | Demanda FP | 35,79 | `J6/(1-17%)/(1-6,08%)` | 45,911927095092459 | 10,12192709509246 |
@@ -31,6 +32,14 @@ A tarifa "com imposto" é obtida com **gross-up**: `tarifa / (1 - ICMS) / (1 - P
 > - Demanda usa a constante literal **6,08%** (o nome definido `PIS_COFINS`), diferente dos 9,25% da BT.
 >
 > Os três divisores diferentes são o que reproduz os números da planilha. Não foram "corrigidos".
+>
+> **No código**, isso significa que baixa tensão, fora ponta e ponta têm um campo
+> `pisCofins` PRÓPRIO (`Tarifa.pisCofins`, editável junto de cada tarifa em
+> Configurações → Tarifas). A demanda **não tem** esse campo — ela é do tipo
+> `TarifaDemanda` (só `semImposto`) e o gross-up (`tarifaDemandaComImposto`) usa
+> sempre `impostos.pisCofinsDemanda` (Configurações → Impostos → "PIS/COFINS da
+> demanda"). É a ÚNICA alíquota de PIS/COFINS que vale para a demanda — não há
+> um segundo campo concorrente.
 
 - ICMS = **17%**
 - Nomes definidos existentes mas **não usados** nas fórmulas de cálculo: `Tarifa_BT=0.87017`, `Fio_B_BT`,
@@ -52,7 +61,7 @@ Duas tabelas. A busca é `INDEX(...; MATCH(TRUE; faixaMáximo >= consumo; 0))` �
 
 - **B1 → tabela RESIDENCIAL** (`Dados!D20:E33`)
 - **B2 → COSIP = 0** (fixo na fórmula)
-- **B3 e MT → tabela DEMAIS** (`Dados!D8:E17`)
+- **B3, B4 e MT → tabela DEMAIS** (`Dados!D8:E17`)
 
 RESIDENCIAL (máx → valor): 100→0 | 150→27,627396297284537 | 200→30,697106996982821 | 250→42,975949795775954 |
 300→46,04566049547423 | 400→49,115371195172514 | 500→55,254792594569075 | 600→58,324503294267359 |
@@ -75,7 +84,7 @@ DEMAIS (máx → valor): 100→3,07 | 150→58,32 | 200→85,951899591551907 | 4
 | 5 | Consumo FP/BT | *entrada* | kWh |
 | 6 | Consumo Ponta | *entrada* | kWh |
 | 7 | Demanda Contratada | *entrada* | kW |
-| 9 | **COSIP** | `IFS(F3="B1"; INDEX(residencial; MATCH(TRUE; maxRes>=F5;0)); F3="B2"; 0; OR(F3="B3";F3="MT"); INDEX(demais; MATCH(TRUE; maxDem>=F5;0)))` | ver §2 |
+| 9 | **COSIP** | `IFS(F3="B1"; INDEX(residencial; MATCH(TRUE; maxRes>=F5;0)); F3="B2"; 0; OR(F3="B3";F3="B4";F3="MT"); INDEX(demais; MATCH(TRUE; maxDem>=F5;0)))` | ver §2 |
 | 10 | **Faturamento Mínimo** | `IFS(F4="MONOFÁSICO";30*K3; "BIFÁSICO";50*K3; "TRIFÁSICO";100*K3; "MÉDIA TENSÃO";0)` | mínimo × tarifa BT c/ imposto |
 | 11 | **Impostos** | `F17 * Dados!$L$3` | compensável × delta de imposto da **BT** |
 | 13 | **Custo de Demanda** | `IF(F4="MÉDIA TENSÃO"; F7*K6; 0)` | demanda × tarifa demanda c/ imposto |
@@ -96,6 +105,19 @@ DEMAIS (máx → valor): 100→3,07 | 150→58,32 | 200→85,951899591551907 | 4
 > ⚠️ **Impostos (linha 11) usa `L3` (delta da BT) mesmo para Média Tensão.** Tecnicamente
 > incoerente (MT deveria usar `L4`/`L5`), mas é o que a planilha faz e é o que reproduz os
 > números. Replicado como está e sinalizado no código.
+
+### Classificação B4 (fora da planilha original)
+
+A **B4** foi acrescentada depois da planilha. Ela é **idêntica à B3** em toda regra —
+mesma tabela de COSIP, mesmo faturamento mínimo por ligação, mesma compensação — com
+**uma única diferença: a tarifa de baixa tensão é 0,72040 em vez de 0,98660** (mesmos
+tributos: ICMS 17% e PIS/COFINS 9,25%).
+
+Por isso toda leitura de `K3`/`L3`/`J3` para uma UC passa por
+`tarifaBaixaTensao(classificação)` (`tariffs.ts`): B4 devolve `tarifas.baixaTensaoB4`,
+qualquer outra classificação devolve `tarifas.baixaTensao`. Isso atinge as linhas
+**F10** (faturamento mínimo), **F11** (impostos), **F19** (custo s/ locação) e **F29**
+(economia contra o concorrente).
 
 ## 4. Totais (coluna `C` da `Preencher`)
 
