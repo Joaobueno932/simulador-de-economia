@@ -6,7 +6,7 @@
  */
 
 /** Classificação tarifária da unidade consumidora (`Preencher!F3`). */
-export type Classificacao = "B1" | "B2" | "B3" | "MT";
+export type Classificacao = "B1" | "B2" | "B3" | "B4" | "MT";
 
 /** Tipo de ligação (`Preencher!F4`). */
 export type Ligacao = "MONOFASICO" | "BIFASICO" | "TRIFASICO" | "MEDIA_TENSAO";

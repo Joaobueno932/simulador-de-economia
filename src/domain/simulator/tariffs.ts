@@ -13,6 +13,9 @@ import type { Bandeira, Classificacao, Ligacao } from "./types";
  *
  * Corresponde ao LAMBDA `TARIFA_COM_IMPOSTO` da planilha, mas com o PIS/COFINS
  * vindo da própria tarifa — porque a planilha usa alíquotas diferentes por linha.
+ *
+ * NÃO usar para a tarifa de demanda: ela não tem `pisCofins` próprio — ver
+ * `tarifaDemandaComImposto`.
  */
 export function tarifaComImposto(tarifa: Tarifa, config: ConfiguracaoSimulador = CONFIG): number {
   return tarifa.semImposto / (1 - config.impostos.icms) / (1 - tarifa.pisCofins);
@@ -23,6 +26,20 @@ export function tarifaComImposto(tarifa: Tarifa, config: ConfiguracaoSimulador =
  */
 export function impostoDaTarifa(tarifa: Tarifa, config: ConfiguracaoSimulador = CONFIG): number {
   return tarifaComImposto(tarifa, config) - tarifa.semImposto;
+}
+
+/**
+ * Gross-up da tarifa de DEMANDA — `Dados!K6 = J6 / (1 - ICMS) / (1 - PIS_COFINS)`.
+ *
+ * Diferente das outras três tarifas, a demanda não carrega seu próprio
+ * `pisCofins`: usa sempre `impostos.pisCofinsDemanda` (o nome definido
+ * `PIS_COFINS` da planilha original). É a ÚNICA fonte dessa alíquota — não há
+ * um segundo campo "PIS/COFINS da demanda" escondido dentro da tarifa.
+ */
+export function tarifaDemandaComImposto(config: ConfiguracaoSimulador = CONFIG): number {
+  const { semImposto } = config.tarifas.demanda;
+  const { icms, pisCofinsDemanda } = config.impostos;
+  return semImposto / (1 - icms) / (1 - pisCofinsDemanda);
 }
 
 /**
@@ -46,7 +63,7 @@ function buscarFaixa(faixas: readonly FaixaCosip[], consumo: number): number {
  *
  * - `B1` → tabela residencial
  * - `B2` → sempre 0 (fixo na fórmula da planilha)
- * - `B3` / `MT` → tabela "demais"
+ * - `B3` / `B4` / `MT` → tabela "demais"
  */
 export function calcularCosip(
   classificacao: Classificacao,
@@ -59,9 +76,25 @@ export function calcularCosip(
     case "B2":
       return 0;
     case "B3":
+    case "B4":
     case "MT":
       return buscarFaixa(config.cosipDemais, consumoForaPonta);
   }
+}
+
+/**
+ * Tarifa de baixa tensão da classificação — `Dados!I3`, exceto B4.
+ *
+ * B4 é a única classificação com tarifa própria (`tarifas.baixaTensaoB4`);
+ * todas as outras usam a BT padrão. MT também cai aqui porque a planilha
+ * aplica a tarifa BT no imposto da parcela compensável mesmo em média tensão
+ * (ver `calcularImpostos`).
+ */
+export function tarifaBaixaTensao(
+  classificacao: Classificacao,
+  config: ConfiguracaoSimulador = CONFIG,
+): Tarifa {
+  return classificacao === "B4" ? config.tarifas.baixaTensaoB4 : config.tarifas.baixaTensao;
 }
 
 /** Adicional da bandeira em R$/kWh (`Dados!K9:K12`). */

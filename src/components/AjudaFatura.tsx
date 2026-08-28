@@ -33,7 +33,7 @@ const INSTRUCOES: Readonly<Record<CampoAjuda, Instrucao>> = {
     onde:
       'No alto da fatura, no campo "Tipo de Fornecimento" — pode aparecer como ' +
       "MONOFÁSICO, BIFÁSICO ou TRIFÁSICO.",
-    dica: 'Ao lado dele fica a "Classificação" (B1, B2, B3), que é o outro campo do formulário.',
+    dica: 'Ao lado dele fica a "Classificação" (B1, B2, B3, B4), que é o outro campo do formulário.',
   },
   consumo: {
     titulo: "Consumo mensal",

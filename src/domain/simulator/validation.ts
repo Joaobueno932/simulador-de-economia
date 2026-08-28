@@ -69,7 +69,7 @@ export const ligacaoSchema = z.enum(["MONOFASICO", "BIFASICO", "TRIFASICO", "MED
   errorMap: () => ({ message: "Selecione o tipo de ligação." }),
 });
 
-export const classificacaoSchema = z.enum(["B1", "B2", "B3", "MT"], {
+export const classificacaoSchema = z.enum(["B1", "B2", "B3", "B4", "MT"], {
   errorMap: () => ({ message: "Selecione a classificação." }),
 });
 
@@ -160,8 +160,15 @@ export const dadosClienteSchema = z.object({
     .default(CONFIG.validadePropostaDias),
 });
 
-/** Máximo de unidades consumidoras por simulação nova. */
-export const MAX_UNIDADES = 3;
+/**
+ * Teto TÉCNICO de unidades consumidoras por simulação.
+ *
+ * Não é uma regra comercial: o cliente pode ter quantas UCs tiver. É só um
+ * limite de sanidade para não gerar um PDF gigante (nem receber um payload
+ * absurdo na API). A proposta pagina as unidades de 3 em 3, então 60 UCs são
+ * 20 páginas — bem acima de qualquer caso real.
+ */
+export const MAX_UNIDADES = 60;
 
 /** Schema de uma simulação NOVA, vinda do formulário. */
 export const simulacaoSchema = z.object({
@@ -169,7 +176,7 @@ export const simulacaoSchema = z.object({
   unidades: z
     .array(unidadeConsumidoraSchema)
     .min(1, "Adicione ao menos uma unidade consumidora.")
-    .max(MAX_UNIDADES, `O simulador comporta até ${MAX_UNIDADES} unidades consumidoras.`),
+    .max(MAX_UNIDADES, `O simulador comporta até ${MAX_UNIDADES} unidades consumidoras por simulação.`),
 });
 
 /**

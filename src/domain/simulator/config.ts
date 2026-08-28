@@ -22,16 +22,32 @@ export interface FaixaCosip {
 }
 
 /**
- * Uma tarifa da aba `Dados` (I2:L6).
+ * Uma tarifa da aba `Dados` (I2:L6) que tem PIS/COFINS PRÓPRIO da linha:
+ * baixa tensão, fora ponta e ponta.
  *
  * `comImposto` é o gross-up: `semImposto / (1 - icms) / (1 - pisCofins)`.
  * `pisCofins` varia por linha na planilha — ver observação em `TARIFAS`.
  */
 export interface Tarifa {
-  /** R$/kWh (ou R$/kW para demanda), sem impostos. Coluna J. */
+  /** R$/kWh, sem impostos. Coluna J. */
   readonly semImposto: number;
   /** Alíquota PIS+COFINS aplicada NESTA linha da planilha. */
   readonly pisCofins: number;
+}
+
+/**
+ * A tarifa de demanda NÃO tem PIS/COFINS próprio: usa `impostos.pisCofinsDemanda`
+ * (gross-up feito por `tarifaDemandaComImposto`, em `tariffs.ts`).
+ *
+ * É um tipo separado — não `Tarifa` — de propósito: se ela tivesse um campo
+ * `pisCofins` próprio, existiriam DOIS lugares editando "o PIS/COFINS da
+ * demanda" (este e `impostos.pisCofinsDemanda`), e um dos dois ficaria
+ * inevitavelmente sem efeito no cálculo. Já aconteceu — ver o histórico deste
+ * arquivo antes desta mudança.
+ */
+export interface TarifaDemanda {
+  /** R$/kW, sem impostos. */
+  readonly semImposto: number;
 }
 
 export interface ConfiguracaoSimulador {
@@ -45,19 +61,30 @@ export interface ConfiguracaoSimulador {
     readonly pis: number;
     /** `Dados!O3` */
     readonly cofins: number;
-    /** Nome definido `PIS_COFINS` — usado SOMENTE na tarifa de demanda. */
+    /**
+     * Nome definido `PIS_COFINS` na planilha — a ÚNICA alíquota de PIS/COFINS
+     * usada no gross-up da tarifa de demanda (ver `TarifaDemanda`).
+     */
     readonly pisCofinsDemanda: number;
   };
 
   readonly tarifas: {
-    /** `Dados!I3` — Baixa Tensão (R$/kWh). */
+    /** `Dados!I3` — Baixa Tensão (R$/kWh). Vale para B1, B2, B3 e MT. */
     readonly baixaTensao: Tarifa;
+    /**
+     * Baixa Tensão da classificação **B4** (R$/kWh).
+     *
+     * B4 é idêntica a B3 em tudo — mesma COSIP, mesmo mínimo de faturamento,
+     * mesma regra de compensação — EXCETO pela tarifa, que é menor. É o único
+     * motivo de esta linha existir; ver `tarifaBaixaTensao` em `tariffs.ts`.
+     */
+    readonly baixaTensaoB4: Tarifa;
     /** `Dados!I4` — Fora Ponta (R$/kWh). */
     readonly foraPonta: Tarifa;
     /** `Dados!I5` — Ponta (R$/kWh). */
     readonly ponta: Tarifa;
-    /** `Dados!I6` — Demanda Fora Ponta (R$/kW). */
-    readonly demanda: Tarifa;
+    /** `Dados!I6` — Demanda Fora Ponta (R$/kW). PIS/COFINS vem de `impostos.pisCofinsDemanda`. */
+    readonly demanda: TarifaDemanda;
   };
 
   /** `Dados!I9:K12` — adicional por bandeira, R$/kWh. */
@@ -65,7 +92,7 @@ export interface ConfiguracaoSimulador {
 
   /** `Dados!D20:E33` — B1. */
   readonly cosipResidencial: readonly FaixaCosip[];
-  /** `Dados!D8:E17` — B3 e MT. */
+  /** `Dados!D8:E17` — B3, B4 e MT. */
   readonly cosipDemais: readonly FaixaCosip[];
 
   /** Consumo mínimo faturável por tipo de ligação, em kWh (`Preencher!F10` / `F17`). */
@@ -117,12 +144,15 @@ export const CONFIG: ConfiguracaoSimulador = {
   tarifas: {
     // Dados!K3 = J3/(1-17%)/(1-SUM(N3:O3)) -> PIS+COFINS = 9,25%
     baixaTensao: { semImposto: 0.9866, pisCofins: 0.0165 + 0.076 },
+    // B4: mesma estrutura de impostos da BT, só a tarifa muda.
+    baixaTensaoB4: { semImposto: 0.7204, pisCofins: 0.0165 + 0.076 },
     // Dados!K4 = J4/(1-17%)/(1-SUM(N4:O4)); N4:O4 VAZIAS -> só ICMS.
     foraPonta: { semImposto: 0.48504, pisCofins: 0 },
     // Dados!K5 — idem, N5:O5 vazias -> só ICMS.
     ponta: { semImposto: 2.38151, pisCofins: 0 },
-    // Dados!K6 = J6/(1-17%)/(1-6,08%) -> literal 6,08%.
-    demanda: { semImposto: 35.79, pisCofins: 0.0608 },
+    // Dados!K6 = J6/(1-17%)/(1-6,08%) -> os 6,08% vêm de impostos.pisCofinsDemanda,
+    // não de um campo próprio desta tarifa (ver TarifaDemanda).
+    demanda: { semImposto: 35.79 },
   },
 
   bandeiras: {
@@ -150,7 +180,7 @@ export const CONFIG: ConfiguracaoSimulador = {
     { minimo: 1500, maximo: 99999, valor: 92.09 },
   ],
 
-  // Dados!C8:E17 — DEMAIS (B3 e MT)
+  // Dados!C8:E17 — DEMAIS (B3, B4 e MT)
   cosipDemais: [
     { minimo: 0, maximo: 100, valor: 3.07 },
     { minimo: 101, maximo: 150, valor: 58.32 },

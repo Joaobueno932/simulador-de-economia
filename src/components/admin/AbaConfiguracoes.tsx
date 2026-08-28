@@ -196,11 +196,14 @@ export function AbaConfiguracoes({
     }
   }
 
+  // Só as três com PIS/COFINS PRÓPRIO. A demanda fica de fora deste array e é
+  // renderizada à parte: ela usa `impostos.pisCofinsDemanda`, não um campo
+  // próprio — ver o comentário de `TarifaDemanda` em config.ts.
   const tarifas = [
     { chave: "baixaTensao", rotulo: "Baixa tensão", unidade: "R$/kWh" },
+    { chave: "baixaTensaoB4", rotulo: "Baixa tensão — B4", unidade: "R$/kWh" },
     { chave: "foraPonta", rotulo: "Fora ponta", unidade: "R$/kWh" },
     { chave: "ponta", rotulo: "Ponta", unidade: "R$/kWh" },
-    { chave: "demanda", rotulo: "Demanda", unidade: "R$/kW" },
   ] as const;
 
   return (
@@ -295,10 +298,39 @@ export function AbaConfiguracoes({
                 />
               </div>
             ))}
+
+            {/* Demanda fica fora do loop: não tem PIS/COFINS próprio — usa o
+                campo "PIS/COFINS da demanda" do card Impostos, ao lado. Ter os
+                dois aqui já causou confusão (um dos dois não fazia nada). */}
+            <div className="grid grid-cols-2 gap-3">
+              <Campo
+                label="Demanda — sem imposto"
+                type="number"
+                min={0}
+                step="any"
+                value={String(c.tarifas.demanda.semImposto)}
+                onChange={(e) =>
+                  set((d) => {
+                    d.tarifas.demanda.semImposto = num(e.target.value);
+                  })
+                }
+                sufixo="R$/kW"
+              />
+              <div className="flex flex-col justify-center rounded-lg bg-slate-50 px-3 py-2 text-xs text-marca-texto-suave">
+                O PIS/COFINS da demanda é o campo{" "}
+                <strong className="font-semibold text-marca-texto">
+                  &ldquo;PIS/COFINS da demanda&rdquo;
+                </strong>
+                , no card Impostos.
+              </div>
+            </div>
           </div>
           <p className="mt-3 rounded-lg bg-marca-azul-suave px-3 py-2 text-xs text-marca-texto-suave">
             O PIS/COFINS varia por linha porque é assim na planilha: só a baixa tensão recebe
-            9,25%; fora ponta e ponta levam apenas ICMS; a demanda usa 6,08%.
+            9,25%; fora ponta e ponta levam apenas ICMS. A demanda tem alíquota própria — veja
+            &ldquo;PIS/COFINS da demanda&rdquo; no card ao lado. A linha{" "}
+            &ldquo;Baixa tensão — B4&rdquo; vale apenas para unidades classificadas como B4; as
+            demais classes usam a &ldquo;Baixa tensão&rdquo;.
           </p>
         </Card>
 
@@ -358,6 +390,8 @@ export function AbaConfiguracoes({
                   })
                 }
                 sufixo="%"
+                ajuda="Usado no custo de demanda (média tensão). É o único campo que controla isso."
+                className="col-span-2"
               />
             </div>
           </Card>
@@ -607,8 +641,8 @@ export function AbaConfiguracoes({
           }
         />
         <TabelaCosip
-          titulo="COSIP — Demais (B3 e MT)"
-          descricao="Aplicada a B3 e MT. B2 (rural) é isenta por regra."
+          titulo="COSIP — Demais (B3, B4 e MT)"
+          descricao="Aplicada a B3, B4 e MT. B2 (rural) é isenta por regra."
           faixas={c.cosipDemais}
           onChange={(faixas) =>
             set((d) => {

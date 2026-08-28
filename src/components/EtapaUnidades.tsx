@@ -15,6 +15,7 @@ import { Copy, Lock, Plus, Trash2, Unlock, Zap } from "lucide-react";
 import { useState } from "react";
 
 import { AjudaFatura } from "./AjudaFatura";
+import { UCS_POR_PAGINA } from "./propostaLayout";
 import { Botao, Campo, Card, MensagemErro, SectionTitle, Select } from "./ui";
 import { MAX_UCS } from "./useSimulacao";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
@@ -32,6 +33,7 @@ const CLASSIFICACOES: readonly { value: Classificacao; label: string }[] = [
   { value: "B1", label: "B1 — Residencial" },
   { value: "B2", label: "B2 — Rural" },
   { value: "B3", label: "B3 — Demais classes" },
+  { value: "B4", label: "B4 — Iluminação pública" },
   { value: "MT", label: "MT — Média tensão" },
 ];
 
@@ -113,7 +115,7 @@ function CardUC({
             variante="sutil"
             onClick={onDuplicar}
             disabled={!podeDuplicar}
-            title={podeDuplicar ? "Duplicar unidade" : `Limite de ${MAX_UCS} unidades atingido`}
+            title={podeDuplicar ? "Duplicar unidade" : `Teto técnico de ${MAX_UCS} unidades atingido`}
           >
             <Copy aria-hidden="true" className="size-4" />
             <span className="sr-only sm:not-sr-only">Duplicar</span>
@@ -355,7 +357,9 @@ export function EtapaUnidades({
           Unidades consumidoras
         </SectionTitle>
         <p className="text-sm text-marca-texto-suave">
-          {unidades.length} de {MAX_UCS} unidades.
+          {unidades.length === 1 ? "1 unidade adicionada." : `${unidades.length} unidades adicionadas.`}{" "}
+          Adicione quantas o cliente tiver — a proposta pagina as unidades de{" "}
+          {UCS_POR_PAGINA} em {UCS_POR_PAGINA} no PDF.
         </p>
       </Card>
 
@@ -384,7 +388,7 @@ export function EtapaUnidades({
         className="w-full border-dashed"
       >
         <Plus aria-hidden="true" className="size-4" />
-        {noLimite ? `Limite de ${MAX_UCS} unidades atingido` : "Adicionar unidade consumidora"}
+        {noLimite ? `Teto técnico de ${MAX_UCS} unidades atingido` : "Adicionar unidade consumidora"}
       </Botao>
     </div>
   );

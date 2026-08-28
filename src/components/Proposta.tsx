@@ -15,8 +15,14 @@
  *
  * 4. Sem `position: absolute` para o conteúdo: o fluxo é natural e em mm, para
  *    que nada seja cortado nem transborde da página A4.
+ *
+ * 5. PAGINAÇÃO: o número de unidades consumidoras não tem limite, mas mais de
+ *    `UCS_POR_PAGINA` barras numa folha viram um amontoado ilegível. Então a
+ *    primeira página leva o resumo completo + as primeiras unidades, e as
+ *    demais saem em páginas de continuação com o mesmo teto por folha.
  */
 
+import { UCS_POR_PAGINA } from "./propostaLayout";
 import { CONFIG, type ConfiguracaoSimulador } from "@/domain/simulator/config";
 import {
   formatarData,
@@ -28,7 +34,7 @@ import {
   formatarTelefone,
   somarDias,
 } from "@/domain/simulator/format";
-import type { DadosCliente, ResultadoSimulacao } from "@/domain/simulator/types";
+import type { DadosCliente, ResultadoSimulacao, ResultadoUC } from "@/domain/simulator/types";
 
 export interface AssetsProposta {
   readonly logoEmConta: string;
@@ -303,7 +309,7 @@ function BarraUC({
   locacao,
   economia,
   altura,
-  compacto,
+  comCabecalho = true,
 }: {
   nome: string;
   faturaAtual: number;
@@ -311,109 +317,31 @@ function BarraUC({
   locacao: number;
   economia: number;
   altura: string;
-  compacto: boolean;
+  /**
+   * Nas páginas de continuação o nome e a economia já estão no card em volta —
+   * repetir aqui só polui.
+   */
+  comCabecalho?: boolean;
 }) {
   const pct = (v: number) => (faturaAtual > 0 ? (v / faturaAtual) * 100 : 0);
 
-  /**
-   * Com muitas unidades, duas barras por UC não cabem na página — o rodapé era
-   * empurrado para fora. Neste caso usamos UMA barra empilhada por unidade: o
-   * comprimento total continua sendo a conta de hoje, a parte clara no fim é o
-   * que ele deixa de pagar, e o valor economizado de cada unidade segue visível
-   * (que é o ponto).
-   */
-  if (compacto) {
-    return (
-      <div style={{ display: "flex", alignItems: "center", gap: "1.5mm" }}>
-        <span
-          style={{
-            width: "11mm",
-            flexShrink: 0,
-            fontSize: "5.6pt",
-            fontWeight: 800,
-            color: TEXTO,
-          }}
-        >
-          {nome}
-        </span>
-
-        <span
-          style={{
-            flex: 1,
-            height: altura,
-            display: "flex",
-            borderRadius: "1mm",
-            overflow: "hidden",
-            background: "#EDF1F5",
-          }}
-        >
-          <span style={{ width: `${pct(residual)}%`, background: DIST_GRAFICO, display: "block" }} />
-          <span style={{ width: `${pct(locacao)}%`, background: VERDE, display: "block" }} />
-          <span
-            style={{
-              width: `${pct(economia)}%`,
-              background: "#D8EFD7",
-              display: "block",
-              borderLeft: `0.4mm solid ${VERDE}`,
-            }}
-          />
-        </span>
-
-        <span
-          style={{
-            width: "16mm",
-            flexShrink: 0,
-            fontSize: "5.4pt",
-            color: CINZA,
-            textAlign: "right",
-          }}
-        >
-          {formatarMoeda(faturaAtual)}
-        </span>
-        <span style={{ fontSize: "5.4pt", color: CINZA, flexShrink: 0 }}>→</span>
-        <span
-          style={{
-            width: "16mm",
-            flexShrink: 0,
-            fontSize: "5.6pt",
-            fontWeight: 800,
-            color: TEXTO,
-            textAlign: "right",
-          }}
-        >
-          {formatarMoeda(residual + locacao)}
-        </span>
-        <span
-          style={{
-            width: "21mm",
-            flexShrink: 0,
-            fontSize: "5.6pt",
-            fontWeight: 800,
-            color: VERDE,
-            textAlign: "right",
-          }}
-        >
-          −{formatarMoeda(economia)}
-        </span>
-      </div>
-    );
-  }
-
   return (
     <div>
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "baseline",
-          marginBottom: "0.8mm",
-        }}
-      >
-        <span style={{ fontSize: "6.6pt", fontWeight: 800, color: TEXTO }}>{nome}</span>
-        <span style={{ fontSize: "6.6pt", fontWeight: 800, color: VERDE }}>
-          economiza {formatarMoeda(economia)}/mês
-        </span>
-      </div>
+      {comCabecalho && (
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "baseline",
+            marginBottom: "0.8mm",
+          }}
+        >
+          <span style={{ fontSize: "6.6pt", fontWeight: 800, color: TEXTO }}>{nome}</span>
+          <span style={{ fontSize: "6.6pt", fontWeight: 800, color: VERDE }}>
+            economiza {formatarMoeda(economia)}/mês
+          </span>
+        </div>
+      )}
 
       {/* HOJE */}
       <div style={{ display: "flex", alignItems: "center", gap: "1.5mm", marginBottom: "0.8mm" }}>
@@ -507,39 +435,42 @@ function BarraUC({
   );
 }
 
-export function Proposta({
+/**
+ * PÁGINA 1 — o resumo completo da proposta.
+ *
+ * Leva os dados do cliente, o resultado consolidado, as duas faturas, as
+ * vantagens e o rodapé. Das unidades, só as `unidadesPagina` (as primeiras);
+ * o resto vai para as páginas de continuação.
+ */
+function PaginaResumo({
   cliente,
   r,
-  config = CONFIG,
-  assets = ASSETS_WEB,
+  config,
+  assets,
+  unidadesPagina,
+  totalPaginas,
 }: {
   cliente: DadosCliente;
   r: ResultadoSimulacao;
-  /** Config vigente (vem do banco no servidor). */
-  config?: ConfiguracaoSimulador;
-  assets?: AssetsProposta;
+  config: ConfiguracaoSimulador;
+  assets: AssetsProposta;
+  /** As unidades que saem NESTA folha (no máximo `UCS_POR_PAGINA`). */
+  unidadesPagina: readonly ResultadoUC[];
+  totalPaginas: number;
 }) {
   const validade = somarDias(cliente.dataProposta, cliente.validadeDias);
 
   /**
-   * A proposta tem que caber em UMA página A4, com 1 ou com 10 unidades.
-   *
-   * O bloco de barras é o único que cresce com o número de UCs, então é ele que
-   * se ajusta: com poucas unidades as barras ficam altas (e preenchem a folha),
-   * com muitas ficam finas (e nada transborda). Sem isso, 3 UCs já empurravam o
-   * rodapé para fora da página.
+   * A página 1 tem que fechar em UMA folha A4 com 1, 2 ou 3 unidades. O bloco
+   * de barras é o único que cresce, então é ele que se ajusta: com uma unidade
+   * as barras ficam altas (e preenchem a folha), com três ficam finas. Acima
+   * disso a paginação já resolveu — não existe mais o caso de 10 barras aqui.
    */
-  const qtdUCs = r.unidades.length;
+  const qtdUCs = unidadesPagina.length;
+  const restantes = r.unidades.length - qtdUCs;
 
-  // Até 4 unidades cabem as duas barras (HOJE / COM EM CONTA), que é a leitura
-  // mais clara. De 5 em diante, uma barra empilhada por unidade — senão o
-  // rodapé é empurrado para fora da folha.
-  const compacto = qtdUCs > 4;
-
-  const alturaBarra =
-    qtdUCs === 1 ? "5mm" : qtdUCs === 2 ? "3.6mm" : qtdUCs <= 4 ? "2.6mm" : qtdUCs <= 7 ? "3mm" : "2.4mm";
-  const espacoBarras =
-    qtdUCs === 1 ? "3mm" : qtdUCs === 2 ? "2.5mm" : qtdUCs <= 4 ? "1.8mm" : "1.4mm";
+  const alturaBarra = qtdUCs === 1 ? "5mm" : qtdUCs === 2 ? "3.6mm" : "2.6mm";
+  const espacoBarras = qtdUCs === 1 ? "3mm" : qtdUCs === 2 ? "2.5mm" : "1.8mm";
 
   return (
     <div
@@ -553,6 +484,9 @@ export function Proposta({
         flexDirection: "column",
         overflow: "hidden",
         boxSizing: "border-box",
+        // Só quebra se houver continuação — senão o Chromium cospe uma folha
+        // em branco no fim do PDF.
+        breakAfter: totalPaginas > 1 ? "page" : "auto",
       }}
     >
       {/* ================= CABEÇALHO ================= */}
@@ -923,7 +857,7 @@ export function Proposta({
             </div>
 
             <div style={{ display: "flex", flexDirection: "column", gap: espacoBarras }}>
-              {r.unidades.map((u) => (
+              {unidadesPagina.map((u) => (
                 <BarraUC
                   key={u.id}
                   nome={u.nome}
@@ -932,10 +866,25 @@ export function Proposta({
                   locacao={u.custoComLocacao}
                   economia={u.economia}
                   altura={alturaBarra}
-                  compacto={compacto}
                 />
               ))}
             </div>
+
+            {/* Com muitas UCs, quem lê precisa saber que a lista continua. */}
+            {restantes > 0 && (
+              <div
+                style={{
+                  marginTop: "2mm",
+                  fontSize: "5.8pt",
+                  fontWeight: 700,
+                  color: AZUL,
+                }}
+              >
+                {restantes === 1
+                  ? "+ 1 unidade consumidora na página seguinte."
+                  : `+ ${restantes} unidades consumidoras nas páginas seguintes.`}
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -1071,6 +1020,7 @@ export function Proposta({
             <div style={{ fontSize: "5.8pt", color: CINZA, marginTop: "1.5mm" }}>
               Emitida em {formatarData(cliente.dataProposta)} · Válida até{" "}
               {formatarData(validade)} ({cliente.validadeDias} dias)
+              {totalPaginas > 1 ? ` · Página 1 de ${totalPaginas}` : ""}
             </div>
           </div>
         </div>
@@ -1097,5 +1047,398 @@ export function Proposta({
       {/* Fio decorativo inferior */}
       <div style={{ height: "1.5mm", background: AZUL_ESCURO }} />
     </div>
+  );
+}
+
+/**
+ * PÁGINAS 2+ — continuação da lista de unidades consumidoras.
+ *
+ * Mesma folha A4, mas só com o que cresce: as barras por unidade. Como sobra
+ * espaço (no máximo `UCS_POR_PAGINA` unidades por folha), cada uma vira um card
+ * com os números abertos — no mês e no ano.
+ */
+function PaginaUnidades({
+  cliente,
+  r,
+  config,
+  assets,
+  unidadesPagina,
+  primeiroIndice,
+  pagina,
+  totalPaginas,
+}: {
+  cliente: DadosCliente;
+  r: ResultadoSimulacao;
+  config: ConfiguracaoSimulador;
+  assets: AssetsProposta;
+  unidadesPagina: readonly ResultadoUC[];
+  /** Posição (base 1) da primeira unidade desta folha na lista completa. */
+  primeiroIndice: number;
+  pagina: number;
+  totalPaginas: number;
+}) {
+  const ultimoIndice = primeiroIndice + unidadesPagina.length - 1;
+
+  // Quanto menos unidades na folha, mais espaço para cada uma.
+  const alturaBarra =
+    unidadesPagina.length === 1 ? "10mm" : unidadesPagina.length === 2 ? "8mm" : "6mm";
+  const alturaMaximaCard =
+    unidadesPagina.length === 1 ? "88mm" : unidadesPagina.length === 2 ? "78mm" : "70mm";
+
+  return (
+    <div
+      style={{
+        width: "210mm",
+        height: "297mm",
+        background: "#fff",
+        color: TEXTO,
+        fontFamily: FONTE,
+        display: "flex",
+        flexDirection: "column",
+        overflow: "hidden",
+        boxSizing: "border-box",
+        breakAfter: pagina < totalPaginas ? "page" : "auto",
+      }}
+    >
+      {/* ================= CABEÇALHO ================= */}
+      <div style={{ borderTop: `2.5px solid ${AZUL}`, margin: "6mm 8mm 0" }} />
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "6mm",
+          padding: "3mm 8mm 3mm",
+          borderBottom: `2.5px solid ${AZUL}`,
+          margin: "0 8mm",
+        }}
+      >
+        <div>
+          <h1
+            style={{
+              fontSize: "17pt",
+              lineHeight: 1.05,
+              fontWeight: 800,
+              color: VERDE,
+              letterSpacing: "-0.01em",
+              margin: 0,
+              textTransform: "uppercase",
+            }}
+          >
+            Economia por unidade
+          </h1>
+          <div style={{ fontSize: "7.5pt", fontWeight: 700, color: CINZA, marginTop: "1mm" }}>
+            {cliente.nome} · unidades {primeiroIndice} a {ultimoIndice} de {r.unidades.length}
+          </div>
+        </div>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={assets.logoEmConta}
+          alt="Em Conta — Energia Renovável"
+          style={{ height: "14mm" }}
+        />
+      </header>
+
+      {/* ================= FAIXA DE CONTEXTO =================
+          Cada folha precisa se sustentar sozinha: quem receber só esta página
+          tem que saber de qual proposta ela é e quanto ela soma no total. */}
+      <section style={{ padding: "4mm 8mm 0" }}>
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: "3mm",
+            border: `1.2px solid ${BORDA}`,
+            borderRadius: "3mm",
+            padding: "2.5mm 4mm",
+          }}
+        >
+          {[
+            { rotulo: "Desconto", valor: formatarDesconto(r.descontoMedio), cor: LARANJA_MARCA },
+            {
+              rotulo: "Economia mensal (total)",
+              valor: formatarMoeda(r.economiaMensal),
+              cor: VERDE,
+            },
+            { rotulo: "Economia anual (total)", valor: formatarMoeda(r.economiaAnual), cor: VERDE },
+            { rotulo: "Unidades", valor: formatarQuantidadeUCs(r.quantidadeUCs), cor: AZUL },
+          ].map((item) => (
+            <div key={item.rotulo}>
+              <div
+                style={{
+                  fontSize: "5.6pt",
+                  fontWeight: 800,
+                  color: CINZA,
+                  textTransform: "uppercase",
+                }}
+              >
+                {item.rotulo}
+              </div>
+              <div
+                style={{
+                  fontSize: "12pt",
+                  fontWeight: 800,
+                  color: item.cor,
+                  letterSpacing: "-0.01em",
+                }}
+              >
+                {item.valor}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ================= UNIDADES DESTA FOLHA =================
+          `flex: 1` para os cards dividirem a folha entre si: com 3 unidades ou
+          com 1, a página fecha cheia em vez de deixar um vão no pé. */}
+      <section
+        style={{ padding: "4mm 8mm 5mm", flex: 1, display: "flex", flexDirection: "column" }}
+      >
+        <TituloSecao>Unidades consumidoras</TituloSecao>
+
+        <div style={{ fontSize: "5.8pt", color: CINZA, margin: "2mm 0 3mm" }}>
+          <span style={{ color: DIST_GRAFICO, fontWeight: 700 }}>■</span>{" "}
+          {config.institucional.distribuidora} &nbsp;
+          <span style={{ color: VERDE, fontWeight: 700 }}>■</span> Em Conta &nbsp;
+          <span style={{ color: "#B7DFB4", fontWeight: 700 }}>■</span> o que você deixa de pagar
+        </div>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: "5mm", flex: 1 }}>
+          {unidadesPagina.map((u, i) => (
+            <div
+              key={u.id}
+              style={{
+                border: `1.5px solid ${VERDE_CLARO}`,
+                borderRadius: "3.5mm",
+                padding: "3.5mm 4mm",
+                boxSizing: "border-box",
+                // Cresce para dividir a folha com os irmãos, mas com teto: uma
+                // unidade sozinha na última página não pode virar um card de
+                // meio metro com uma barrinha perdida no meio.
+                flex: 1,
+                maxHeight: alturaMaximaCard,
+                display: "flex",
+                flexDirection: "column",
+                justifyContent: "space-between",
+              }}
+            >
+              <div
+                style={{
+                  display: "flex",
+                  alignItems: "baseline",
+                  justifyContent: "space-between",
+                  gap: "3mm",
+                  marginBottom: "2.5mm",
+                }}
+              >
+                <span style={{ fontSize: "10pt", fontWeight: 800, color: AZUL }}>
+                  {primeiroIndice + i}. {u.nome}
+                </span>
+                <span style={{ fontSize: "6.2pt", color: CINZA }}>
+                  {u.classificacao} · consumo compensável {formatarKwh(u.consumoCompensavel)}
+                </span>
+              </div>
+
+              <BarraUC
+                nome={u.nome}
+                faturaAtual={u.faturaSemLocacao}
+                residual={u.valorResidual}
+                locacao={u.custoComLocacao}
+                economia={u.economia}
+                altura={alturaBarra}
+                comCabecalho={false}
+              />
+
+              <div
+                style={{
+                  display: "flex",
+                  gap: "2mm",
+                  marginTop: "3mm",
+                  paddingTop: "2.5mm",
+                  borderTop: `1px solid ${BORDA}`,
+                }}
+              >
+                {[
+                  { rotulo: "Fatura hoje", valor: formatarMoeda(u.faturaSemLocacao), cor: TEXTO },
+                  {
+                    rotulo: "Fatura com Em Conta",
+                    valor: formatarMoeda(u.faturaComLocacao),
+                    cor: VERDE,
+                  },
+                  { rotulo: "Economia por mês", valor: formatarMoeda(u.economia), cor: VERDE },
+                  { rotulo: "Economia por ano", valor: formatarMoeda(u.economia * 12), cor: VERDE },
+                ].map((item) => (
+                  <div key={item.rotulo} style={{ flex: 1, minWidth: 0 }}>
+                    <div
+                      style={{
+                        fontSize: "5.4pt",
+                        fontWeight: 800,
+                        color: CINZA,
+                        textTransform: "uppercase",
+                      }}
+                    >
+                      {item.rotulo}
+                    </div>
+                    <div style={{ fontSize: "9pt", fontWeight: 800, color: item.cor }}>
+                      {item.valor}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ================= RODAPÉ ================= */}
+      <footer style={{ marginTop: "auto" }}>
+        {/* A última folha fecha a proposta: é ela que fica na mesa do cliente
+            depois que ele confere as unidades, então leva o convite. */}
+        {pagina === totalPaginas && (
+          <div
+            style={{
+              display: "flex",
+              alignItems: "flex-end",
+              justifyContent: "space-between",
+              padding: "0 8mm",
+              gap: "4mm",
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={assets.mascote} alt="" style={{ height: "30mm" }} />
+
+            <div style={{ textAlign: "right", paddingBottom: "2mm" }}>
+              <div
+                style={{
+                  fontSize: "9.5pt",
+                  fontWeight: 800,
+                  color: AZUL,
+                  lineHeight: 1.15,
+                  textTransform: "uppercase",
+                }}
+              >
+                Fale com a gente e<br />
+                comece a economizar
+              </div>
+              <div
+                style={{
+                  display: "inline-block",
+                  marginTop: "1.5mm",
+                  background: AZUL,
+                  color: "#fff",
+                  borderRadius: "999px",
+                  padding: "1.6mm 6mm",
+                  fontSize: "13pt",
+                  fontWeight: 800,
+                  letterSpacing: "0.02em",
+                }}
+              >
+                {config.institucional.whatsapp}
+              </div>
+            </div>
+          </div>
+        )}
+
+        <div
+          style={{
+            display: "flex",
+            alignItems: "flex-end",
+            justifyContent: "space-between",
+            gap: "4mm",
+            padding: "0 8mm 3mm",
+          }}
+        >
+          <div style={{ fontSize: "5.8pt", color: CINZA }}>
+            Proposta de {cliente.nome} · emitida em {formatarData(cliente.dataProposta)} · consultor{" "}
+            {cliente.consultor}
+          </div>
+          <div style={{ fontSize: "7pt", fontWeight: 800, color: AZUL }}>
+            Página {pagina} de {totalPaginas}
+          </div>
+        </div>
+
+        {/* Barra azul com os logotipos */}
+        <div
+          style={{
+            background: AZUL,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "10mm",
+            padding: "3mm 8mm",
+          }}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={assets.logoEmContaBranco} alt="Em Conta" style={{ height: "8mm" }} />
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={assets.logoCsiFiems} alt="CSI — Sistema FIEMS" style={{ height: "7mm" }} />
+        </div>
+      </footer>
+
+      {/* Fio decorativo inferior */}
+      <div style={{ height: "1.5mm", background: AZUL_ESCURO }} />
+    </div>
+  );
+}
+
+/** Fatia a lista de unidades nos blocos que viram páginas. */
+function emGrupos<T>(itens: readonly T[], tamanho: number): T[][] {
+  const grupos: T[][] = [];
+  for (let i = 0; i < itens.length; i += tamanho) grupos.push(itens.slice(i, i + tamanho));
+  return grupos;
+}
+
+/**
+ * A proposta inteira: a página de resumo mais quantas páginas de unidades forem
+ * necessárias, `UCS_POR_PAGINA` por folha.
+ *
+ * Devolve as folhas como irmãs, sem contêiner: o Chromium imprime cada `div` de
+ * 297mm como uma página, e a quebra é declarada em cada folha.
+ */
+export function Proposta({
+  cliente,
+  r,
+  config = CONFIG,
+  assets = ASSETS_WEB,
+}: {
+  cliente: DadosCliente;
+  r: ResultadoSimulacao;
+  /** Config vigente (vem do banco no servidor). */
+  config?: ConfiguracaoSimulador;
+  assets?: AssetsProposta;
+}) {
+  // O schema exige ao menos uma UC, mas se a lista viesse vazia a página de
+  // resumo ainda tem que sair — daí o `?? []` e o `Math.max`.
+  const paginas = emGrupos(r.unidades, UCS_POR_PAGINA);
+  const [primeira = [], ...continuacoes] = paginas;
+  const totalPaginas = Math.max(paginas.length, 1);
+
+  return (
+    <>
+      <PaginaResumo
+        cliente={cliente}
+        r={r}
+        config={config}
+        assets={assets}
+        unidadesPagina={primeira}
+        totalPaginas={totalPaginas}
+      />
+
+      {continuacoes.map((grupo, i) => (
+        <PaginaUnidades
+          key={grupo[0]?.id ?? i}
+          cliente={cliente}
+          r={r}
+          config={config}
+          assets={assets}
+          unidadesPagina={grupo}
+          primeiroIndice={(i + 1) * UCS_POR_PAGINA + 1}
+          pagina={i + 2}
+          totalPaginas={totalPaginas}
+        />
+      ))}
+    </>
   );
 }
