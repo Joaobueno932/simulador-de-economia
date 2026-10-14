@@ -177,6 +177,16 @@ BEGIN
     FOREIGN KEY (usuario_id) REFERENCES usuarios (id) ON DELETE SET NULL;
 END $$;
 
+-- A parte da conta que vai para a Em Conta ("Fatura Em Conta", a energia
+-- compensada com desconto). `fatura_com_em_conta` é o TOTAL que o cliente passa
+-- a pagar — distribuidora + Em Conta —, e os dois não dão para separar a partir
+-- das outras colunas: faltaria uma equação.
+--
+-- NULL é permitido porque as propostas gravadas antes desta coluna não têm o
+-- valor. Elas são preenchidas sozinhas, a partir do JSON da simulação, na
+-- primeira vez que aparecem numa listagem — ver `listarPropostas`.
+ALTER TABLE propostas ADD COLUMN IF NOT EXISTS valor_pago_locador NUMERIC;
+
 CREATE INDEX IF NOT EXISTS propostas_vendedor ON propostas (vendedor_id, criada_em DESC);
 CREATE INDEX IF NOT EXISTS propostas_data ON propostas (criada_em DESC);
 

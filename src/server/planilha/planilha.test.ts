@@ -71,6 +71,7 @@ function proposta(sobrescreve: Partial<PropostaListada> = {}): PropostaListada {
     faturaComEmConta: 2100.25,
     economiaMensal: 380.25,
     economiaAnual: 4563,
+    valorPagoLocador: 1194.16,
     descontoMedio: 0.15,
     criadaEm: "2026-03-10T14:30:00.000Z",
     ...sobrescreve,
@@ -190,19 +191,39 @@ describe("planilha de clientes", () => {
     expect(aba).toContain("(67) 99988-7766");
   });
 
+  it("traz a Fatura Em Conta, separada do total que o cliente passa a pagar", () => {
+    const aba = partes.get("xl/worksheets/sheet1.xml")!;
+
+    expect(aba).toContain("Fatura Em Conta");
+    expect(aba).toContain("<v>1194.16</v>"); // a parte que vai para a Em Conta
+    expect(aba).toContain("<v>2100.25</v>"); // o total, que já existia
+    expect(aba).toContain("<f>SUM(J6:J6)</f>"); // e ela entra na linha de totais
+  });
+
+  it("deixa a célula EM BRANCO quando a proposta antiga não tem o valor", () => {
+    const antiga = abrirZip(
+      montarPlanilhaDeClientes(dados([proposta({ valorPagoLocador: null })])),
+    );
+    const aba = antiga.get("xl/worksheets/sheet1.xml")!;
+
+    // Em branco, e não zero: zero somaria errado no total e mentiria na leitura.
+    expect(aba).toContain('<c r="J6" s="10"/>');
+    expect(aba).not.toContain("<v>0</v>");
+  });
+
   it("congela o cabeçalho, filtra só os dados e soma por fórmula", () => {
     const aba = partes.get("xl/worksheets/sheet1.xml")!;
 
     expect(aba).toContain('ySplit="5"');
     expect(aba).toContain('topLeftCell="A6"');
     // Uma proposta: cabeçalho na 5, dado na 6. A linha 7 (totais) fica fora.
-    expect(aba).toContain('<autoFilter ref="A5:N6"/>');
-    expect(aba).toContain("<f>SUM(K6:K6)</f>");
-    expect(aba).toContain("<f>AVERAGE(L6:L6)</f>");
+    expect(aba).toContain('<autoFilter ref="A5:O6"/>');
+    expect(aba).toContain("<f>SUM(L6:L6)</f>");
+    expect(aba).toContain("<f>AVERAGE(M6:M6)</f>");
   });
 
   it("liga cada linha ao PDF da proposta", () => {
-    expect(partes.get("xl/worksheets/sheet1.xml")).toContain('<hyperlink ref="N6"');
+    expect(partes.get("xl/worksheets/sheet1.xml")).toContain('<hyperlink ref="O6"');
     expect(partes.get("xl/worksheets/_rels/sheet1.xml.rels")).toContain(
       "https://simulador.emconta.com.br/api/propostas/17/pdf",
     );

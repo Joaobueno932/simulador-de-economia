@@ -21,6 +21,7 @@ import {
   podeVerProposta,
   type Usuario,
 } from "@/domain/auth/types";
+import { calcularSimulacao } from "@/domain/simulator/calculations";
 import { validarConfiguracao } from "@/domain/simulator/configSchema";
 import { simulacaoArmazenadaSchema } from "@/domain/simulator/validation";
 import type { ConfiguracaoSimulador } from "@/domain/simulator/config";
@@ -44,9 +45,10 @@ export async function registrarProposta(r: RegistroProposta): Promise<number> {
        usuario_id, vendedor_id, consultor,
        cliente_nome, cliente_documento, cliente_telefone,
        quantidade_ucs, consumo_medio, fatura_atual, fatura_com_em_conta,
+       valor_pago_locador,
        economia_mensal, economia_anual, desconto_medio,
        simulacao, configuracao
-     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+     ) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
      RETURNING id`,
     [
       r.usuarioId,
@@ -59,6 +61,7 @@ export async function registrarProposta(r: RegistroProposta): Promise<number> {
       r.resultado.consumoMedioMensal,
       r.resultado.faturaAtual,
       r.resultado.faturaComEmConta,
+      r.resultado.valorPagoLocador,
       r.resultado.economiaMensal,
       r.resultado.economiaAnual,
       r.resultado.descontoMedio,
@@ -81,7 +84,13 @@ export interface PropostaListada {
   readonly quantidadeUCs: number;
   readonly consumoMedio: number;
   readonly faturaAtual: number;
+  /** O total que o cliente passa a pagar: distribuidora + Em Conta. */
   readonly faturaComEmConta: number;
+  /**
+   * A parte que vai para a Em Conta ("Fatura Em Conta", energia compensada com
+   * desconto). Nulo só se a proposta for antiga e o JSON dela não recalcular.
+   */
+  readonly valorPagoLocador: number | null;
   readonly economiaMensal: number;
   readonly economiaAnual: number;
   readonly descontoMedio: number;
@@ -150,7 +159,13 @@ export async function listarPropostas(
             p.consultor, p.vendedor_id,
             (v.foto IS NOT NULL) AS vendedor_tem_foto,
             p.quantidade_ucs, p.consumo_medio, p.fatura_atual, p.fatura_com_em_conta,
-            p.economia_mensal, p.economia_anual, p.desconto_medio, p.criada_em
+            p.valor_pago_locador,
+            p.economia_mensal, p.economia_anual, p.desconto_medio, p.criada_em,
+            -- O JSON só vem para a linha que ainda não tem valor_pago_locador
+            -- (proposta anterior à coluna). São ~4 KB por linha: trazer para
+            -- todas encheria a resposta à toa, ainda mais na exportação.
+            CASE WHEN p.valor_pago_locador IS NULL THEN p.simulacao END AS simulacao_pendente,
+            CASE WHEN p.valor_pago_locador IS NULL THEN p.configuracao END AS config_pendente
        FROM propostas p
        LEFT JOIN usuarios v ON v.id = p.vendedor_id
        ${where}
@@ -159,23 +174,103 @@ export async function listarPropostas(
     params,
   );
 
-  return linhas.map((l) => ({
-    id: Number(l.id),
-    clienteNome: String(l.cliente_nome),
-    clienteDocumento: String(l.cliente_documento),
-    clienteTelefone: String(l.cliente_telefone),
-    consultor: String(l.consultor),
-    vendedorId: l.vendedor_id === null ? null : Number(l.vendedor_id),
-    vendedorTemFoto: Boolean(l.vendedor_tem_foto),
-    quantidadeUCs: n(l.quantidade_ucs),
-    consumoMedio: n(l.consumo_medio),
-    faturaAtual: n(l.fatura_atual),
-    faturaComEmConta: n(l.fatura_com_em_conta),
-    economiaMensal: n(l.economia_mensal),
-    economiaAnual: n(l.economia_anual),
-    descontoMedio: n(l.desconto_medio),
-    criadaEm: (l.criada_em as Date).toISOString(),
-  }));
+  const recalculadas = new Map<number, number>();
+
+  const propostas = linhas.map((l) => {
+    const id = Number(l.id);
+
+    return {
+      id,
+      clienteNome: String(l.cliente_nome),
+      clienteDocumento: String(l.cliente_documento),
+      clienteTelefone: String(l.cliente_telefone),
+      consultor: String(l.consultor),
+      vendedorId: l.vendedor_id === null ? null : Number(l.vendedor_id),
+      vendedorTemFoto: Boolean(l.vendedor_tem_foto),
+      quantidadeUCs: n(l.quantidade_ucs),
+      consumoMedio: n(l.consumo_medio),
+      faturaAtual: n(l.fatura_atual),
+      faturaComEmConta: n(l.fatura_com_em_conta),
+      valorPagoLocador:
+        l.valor_pago_locador !== null
+          ? n(l.valor_pago_locador)
+          : recalcularValorEmConta(id, l.simulacao_pendente, l.config_pendente, recalculadas),
+      economiaMensal: n(l.economia_mensal),
+      economiaAnual: n(l.economia_anual),
+      descontoMedio: n(l.desconto_medio),
+      criadaEm: (l.criada_em as Date).toISOString(),
+    };
+  });
+
+  await gravarValoresRecalculados(recalculadas);
+
+  return propostas;
+}
+
+/**
+ * Recalcula a "Fatura Em Conta" de uma proposta anterior à coluna.
+ *
+ * Sai do MESMO cálculo que gerou o PDF, a partir da simulação e da configuração
+ * congeladas na linha — então o número bate com o documento que o cliente
+ * recebeu, até os centavos. Não há como obtê-lo das outras colunas: elas dão
+ * `fatura_atual` e o total `fatura_com_em_conta`, e separar distribuidora de Em
+ * Conta exigiria uma equação a mais.
+ *
+ * Se o JSON antigo não passar na validação (formato de antes de alguma mudança),
+ * devolve nulo: a coluna mostra "—" e a listagem segue. Um dado a menos numa
+ * linha velha não pode derrubar a tela inteira.
+ */
+function recalcularValorEmConta(
+  id: number,
+  simulacao: unknown,
+  configuracao: unknown,
+  recalculadas: Map<number, number>,
+): number | null {
+  if (simulacao == null || configuracao == null) return null;
+
+  try {
+    const resultado = calcularSimulacao(
+      simulacaoArmazenadaSchema.parse(simulacao) as Simulacao,
+      validarConfiguracao(configuracao),
+    );
+
+    recalculadas.set(id, resultado.valorPagoLocador);
+    return resultado.valorPagoLocador;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Grava o que foi recalculado, para não refazer a conta na próxima listagem.
+ *
+ * É um preenchimento preguiçoso, no lugar de um script de migração: o cálculo
+ * mora no TypeScript (não dá para fazê-lo em SQL sem duplicar a regra de
+ * negócio, que é justamente o que não se quer), e assim as linhas antigas vão
+ * se completando sozinhas conforme aparecem nas listagens — sem passo manual
+ * depois do deploy.
+ *
+ * É melhor-esforço: a escrita é idempotente (duas requisições simultâneas
+ * gravam o mesmo número) e uma falha aqui NÃO derruba a listagem, que já tem o
+ * valor certo em mãos.
+ */
+async function gravarValoresRecalculados(valores: Map<number, number>): Promise<void> {
+  if (valores.size === 0) return;
+
+  try {
+    await consultar(
+      `UPDATE propostas AS p
+          SET valor_pago_locador = v.valor
+         FROM UNNEST($1::bigint[], $2::numeric[]) AS v(id, valor)
+        WHERE p.id = v.id AND p.valor_pago_locador IS NULL`,
+      [[...valores.keys()], [...valores.values()]],
+    );
+  } catch (erro) {
+    console.error(
+      "Não foi possível preencher valor_pago_locador das propostas antigas:",
+      erro instanceof Error ? erro.message : "desconhecido",
+    );
+  }
 }
 
 /** Métricas de um vendedor no período. */

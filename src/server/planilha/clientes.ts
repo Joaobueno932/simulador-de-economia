@@ -115,6 +115,7 @@ const COLUNAS_CLIENTES = [
   { titulo: "Consumo médio", largura: 16 },
   { titulo: "Fatura atual", largura: 15 },
   { titulo: "Com Em Conta", largura: 15 },
+  { titulo: "Fatura Em Conta", largura: 16 },
   { titulo: "Economia mensal", largura: 16 },
   { titulo: "Economia anual", largura: 16 },
   { titulo: "Desconto", largura: 11 },
@@ -158,6 +159,11 @@ function abaClientes(dados: DadosDaExportacao): Aba {
         numero(p.consumoMedio, ESTILO.kwh),
         numero(p.faturaAtual, ESTILO.moeda),
         numero(p.faturaComEmConta, ESTILO.moeda),
+        // Proposta antiga sem o valor registrado fica em branco, não em zero:
+        // zero somaria errado no total e mentiria na leitura.
+        p.valorPagoLocador === null
+          ? vazia(ESTILO.moeda)
+          : numero(p.valorPagoLocador, ESTILO.moeda),
         numero(p.economiaMensal, ESTILO.moeda),
         numero(p.economiaAnual, ESTILO.moedaDestaque),
         numero(p.descontoMedio, ESTILO.percentual),
@@ -205,8 +211,9 @@ function abaClientes(dados: DadosDaExportacao): Aba {
           consolidar("SUM", 7, ESTILO.totalMoeda),
           consolidar("SUM", 8, ESTILO.totalMoeda),
           consolidar("SUM", 9, ESTILO.totalMoeda),
-          consolidar("SUM", 10, ESTILO.totalMoedaDestaque),
-          consolidar("AVERAGE", 11, ESTILO.totalPercentual),
+          consolidar("SUM", 10, ESTILO.totalMoeda),
+          consolidar("SUM", 11, ESTILO.totalMoedaDestaque),
+          consolidar("AVERAGE", 12, ESTILO.totalPercentual),
           vazia(ESTILO.totalVazio),
           vazia(ESTILO.totalVazio),
         ],
@@ -218,6 +225,16 @@ function abaClientes(dados: DadosDaExportacao): Aba {
   linhas.push(linha([]));
   linhas.push(
     faixa(
+      '"Com Em Conta" é o total que o cliente passa a pagar; "Fatura Em Conta" é a ' +
+        "parte dele que vai para a Em Conta (energia compensada com desconto) — o resto " +
+        "continua indo para a distribuidora.",
+      ESTILO.subtitulo,
+      total,
+      18,
+    ),
+  );
+  linhas.push(
+    faixa(
       "Cada linha é uma proposta já emitida, com os números congelados na emissão — " +
         "eles não mudam se a tarifa for alterada depois. O link abre o PDF original " +
         "(é preciso estar logado no simulador).",
@@ -227,8 +244,10 @@ function abaClientes(dados: DadosDaExportacao): Aba {
     ),
   );
 
-  const mesclas = [1, 2, 3].map((l) => `A${l}:${refCelula(l, ultima)}`);
-  mesclas.push(`A${linhas.length}:${refCelula(linhas.length, ultima)}`);
+  // Cabeçalho (1 a 3) e as duas linhas de nota no pé, todas de ponta a ponta.
+  const mesclas = [1, 2, 3, linhas.length - 1, linhas.length].map(
+    (l) => `A${l}:${refCelula(l, ultima)}`,
+  );
   if (dados.propostas.length === 0) {
     mesclas.push(`A${primeiraDeDados}:${refCelula(primeiraDeDados, ultima)}`);
   }

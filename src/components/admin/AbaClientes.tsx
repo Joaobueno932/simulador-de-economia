@@ -294,7 +294,7 @@ export function AbaClientes({
           </p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[60rem] border-collapse text-sm">
+            <table className="w-full min-w-[68rem] border-collapse text-sm">
               <thead>
                 <tr className="border-b border-marca-borda text-left">
                   {[
@@ -304,6 +304,7 @@ export function AbaClientes({
                     "Consumo",
                     "Fatura atual",
                     "Com Em Conta",
+                    "Fatura Em Conta",
                     "Economia anual",
                     "Desconto",
                     "Data",
@@ -357,6 +358,19 @@ export function AbaClientes({
                     <td className="whitespace-nowrap px-2 py-2.5 tabular-nums">
                       {formatarMoeda(p.faturaComEmConta)}
                     </td>
+
+                    {/* A parte que vai para a Em Conta. Nulo em proposta antiga
+                        cujo JSON não recalculou — aí mostra travessão, não R$ 0,00. */}
+                    <td className="whitespace-nowrap px-2 py-2.5 tabular-nums">
+                      {p.valorPagoLocador === null ? (
+                        <span className="text-marca-texto-suave" title="Proposta antiga, sem este valor registrado">
+                          —
+                        </span>
+                      ) : (
+                        formatarMoeda(p.valorPagoLocador)
+                      )}
+                    </td>
+
                     <td className="whitespace-nowrap px-2 py-2.5 font-bold tabular-nums text-marca-verde-escuro">
                       {formatarMoeda(p.economiaAnual)}
                     </td>
