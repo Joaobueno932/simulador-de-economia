@@ -140,7 +140,9 @@ export async function listarPropostas(
 ): Promise<PropostaListada[]> {
   const { where, params } = condicoes(filtro, restringirAoVendedor);
 
-  const limite = Math.min(Math.max(filtro.limite ?? 200, 1), 500);
+  // Teto de 5000: a tela pede 200, a exportação em planilha pede o período
+  // inteiro. O teto existe para o SELECT não virar ilimitado por descuido.
+  const limite = Math.min(Math.max(filtro.limite ?? 200, 1), 5000);
   params.push(limite);
 
   const linhas = await consultar<Record<string, unknown>>(
