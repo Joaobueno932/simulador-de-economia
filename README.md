@@ -113,7 +113,9 @@ Sem essa variável, o sistema tenta nesta ordem: Chromium do Puppeteer →
 | `src/server/usuarios.ts` | CRUD de usuários, com as permissões aplicadas. |
 | `src/server/senhasDesconto.ts` | Senhas de uso único (emissão e consumo). |
 | `src/server/pdf.ts` | Puppeteer + `renderToStaticMarkup` + assets em base64. |
+| `src/server/planilha/` | Gerador de `.xlsm` à mão (ZIP + OOXML, sem dependência). Puro, com teste. |
 | `src/app/api/proposta/pdf/route.ts` | **A rota do PDF.** Revalida, recalcula e impõe as regras. |
+| `src/app/api/propostas/planilha/route.ts` | Exporta a aba Clientes em `.xlsm`, com a mesma trava de acesso da listagem. |
 | `src/middleware.ts` | Corte rápido por cookie. **Não** é a autorização de verdade. |
 
 ### Interface
@@ -172,8 +174,8 @@ tela que o mostre de novo — porque não há como.
 
 ## Verificação feita
 
-- **130/130 testes** (Vitest), incluindo o caso de regressão completo da planilha e a
-  matriz de permissões dos três papéis.
+- **187/187 testes** (Vitest), incluindo o caso de regressão completo da planilha, a
+  matriz de permissões dos três papéis e o pacote `.xlsm` reaberto parte por parte.
 - **34 checagens ponta a ponta** contra Postgres real e o build de produção, cobrindo o
   abuso e não só o caminho feliz:
   - vendedor forjando `desconto: 0.9` direto na API → **403**;

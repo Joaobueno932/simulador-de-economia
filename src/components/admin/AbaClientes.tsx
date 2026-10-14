@@ -8,7 +8,15 @@
  * mudado depois.
  */
 
-import { ExternalLink, Loader2, Trash2, TriangleAlert, Users, X } from "lucide-react";
+import {
+  ExternalLink,
+  FileSpreadsheet,
+  Loader2,
+  Trash2,
+  TriangleAlert,
+  Users,
+  X,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 
 import { Avatar } from "../Avatar";
@@ -127,6 +135,7 @@ export function AbaClientes({
   const [erro, setErro] = useState<string | null>(null);
   const [aRemover, setARemover] = useState<PropostaListada | null>(null);
   const [removendo, setRemovendo] = useState(false);
+  const [exportando, setExportando] = useState(false);
 
   const carregar = useCallback(async (f: EstadoFiltros) => {
     setCarregando(true);
@@ -158,6 +167,47 @@ export function AbaClientes({
   const economiaTotal = propostas.reduce((s, p) => s + p.economiaAnual, 0);
 
   const podeRemover = podeExcluirProposta(ator.papel);
+
+  /**
+   * Baixa a planilha com os MESMOS filtros da tela.
+   *
+   * Vai por `fetch` em vez de um link direto por dois motivos: o erro do
+   * servidor chega como JSON e aparece aqui (um link levaria a uma aba com
+   * texto cru), e o botão fica ocupado enquanto o arquivo é montado.
+   */
+  async function exportar() {
+    setExportando(true);
+    setErro(null);
+
+    try {
+      const resposta = await fetch(`/api/propostas/planilha${paraQuery(filtros)}`);
+
+      if (!resposta.ok) {
+        const dados = (await resposta.json().catch(() => null)) as { erro?: string } | null;
+        setErro(dados?.erro ?? "Não foi possível gerar a planilha.");
+        return;
+      }
+
+      const arquivo =
+        /filename="([^"]+)"/.exec(resposta.headers.get("Content-Disposition") ?? "")?.[1] ??
+        "clientes-em-conta.xlsm";
+
+      const blob = await resposta.blob();
+      const url = URL.createObjectURL(blob);
+
+      const ancora = document.createElement("a");
+      ancora.href = url;
+      ancora.download = arquivo;
+      ancora.click();
+
+      // Sem o revoke o blob fica na memória da aba até recarregar a página.
+      URL.revokeObjectURL(url);
+    } catch {
+      setErro("Não foi possível conectar.");
+    } finally {
+      setExportando(false);
+    }
+  }
 
   async function remover() {
     if (!aRemover) return;
@@ -192,16 +242,37 @@ export function AbaClientes({
       />
 
       <Card>
-        <SectionTitle
-          icon={<Users aria-hidden="true" className="size-5" />}
-          descricao={
-            propostas.length > 0
-              ? `${propostas.length} proposta(s) · ${formatarMoeda(economiaTotal)} de economia anual`
-              : "Cada proposta emitida, com o PDF original."
-          }
-        >
-          Clientes atendidos
-        </SectionTitle>
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <SectionTitle
+            icon={<Users aria-hidden="true" className="size-5" />}
+            descricao={
+              propostas.length > 0
+                ? `${propostas.length} proposta(s) · ${formatarMoeda(economiaTotal)} de economia anual`
+                : "Cada proposta emitida, com o PDF original."
+            }
+          >
+            Clientes atendidos
+          </SectionTitle>
+
+          <Botao
+            variante="sutil"
+            onClick={exportar}
+            disabled={exportando || carregando || propostas.length === 0}
+            title={
+              propostas.length === 0
+                ? "Nada para exportar com estes filtros"
+                : "Baixa esta lista em Excel (.xlsm), com os filtros aplicados"
+            }
+            className="shrink-0"
+          >
+            {exportando ? (
+              <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+            ) : (
+              <FileSpreadsheet aria-hidden="true" className="size-4" />
+            )}
+            {exportando ? "Gerando…" : "Exportar .xlsm"}
+          </Botao>
+        </div>
 
         {erro ? (
           <p

@@ -17,3 +17,8 @@ next-env.d.ts
 # Pasta de trabalho com as imagens de instrução originais. As que o app serve
 # estão em public/instrucoes/ — versionar as duas seria duplicar os arquivos.
 instrução/
+
+# Saída crua do gerador de favicon (favicon.io). Os ícones que o app serve
+# estão em src/app/favicon.ico e public/icones/ — o resto é pasta de trabalho.
+/favicon.ico
+favicon_io/
